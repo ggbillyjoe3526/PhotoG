@@ -142,14 +142,28 @@
   }
 
   /**
-   * Tell the browser the exact display width so srcset picks the right file.
-   * Only ever asks for *more* pixels: if the file already chosen is sharp
-   * enough we leave it alone, so nothing in flight is cancelled and
-   * re-downloaded.
+   * The HTML ships a close estimate of each thumbnail's width in `sizes`.
+   * Once a thumbnail has loaded, check it against the exact laid-out width
+   * and ask for a larger file only if it's too small (e.g. after switching to
+   * large thumbnails). Never earlier and never smaller: changing `sizes`
+   * while a download is in flight makes browsers fetch the image twice.
    */
+  var pendingWidth = new WeakMap();
+
   function updateSizes(picture, width) {
     var img = picture && picture.querySelector('img');
     if (!img) return;
+    if (!(img.complete && img.naturalWidth)) {
+      if (!pendingWidth.has(img)) {
+        img.addEventListener('load', function () {
+          var w = pendingWidth.get(img);
+          pendingWidth.delete(img);
+          updateSizes(picture, w);
+        }, { once: true });
+      }
+      pendingWidth.set(img, width);
+      return;
+    }
     var have = candidateWidth(img);
     if (have && have >= width * (window.devicePixelRatio || 1) * 0.98) return;
     var sizes = Math.ceil(width) + 'px';
@@ -292,7 +306,6 @@
 
     /* ---- markup */
     var dialog = el('dialog', 'viewer');
-    dialog.setAttribute('aria-labelledby', 'viewer-title');
     dialog.innerHTML =
       '<div class="viewer-top">' +
         '<p class="viewer-count">' +
@@ -439,7 +452,9 @@
         b.setAttribute('aria-disabled', String(i === total - 1));
       });
       renderInfo(photo);
-      statusEl.textContent = 'Photo ' + (i + 1) + ' of ' + total + (photo.title ? ': ' + photo.title : '');
+      var position = 'Photo ' + (i + 1) + ' of ' + total;
+      dialog.setAttribute('aria-label', photo.title ? photo.title + ', ' + position.toLowerCase() : position);
+      statusEl.textContent = position + (photo.title ? ': ' + photo.title : '');
 
       frame.style.setProperty('--tint', photo.tint || 'transparent');
       frame.style.transform = '';
@@ -555,6 +570,34 @@
       history.replaceState(history.state, '', hashFor(next));
     }
 
+    /** Reset state once the dialog has closed; focus the photo's tile. */
+    function cleanup(i) {
+      dialog.classList.remove('is-closing');
+      root.classList.remove('viewer-open');
+      if (frame.getAnimations) frame.getAnimations().forEach(function (a) { a.cancel(); });
+      closing = false;
+      clearTimeout(slowTimer);
+      loadToken++;
+      if (full) { full.remove(); full = null; }
+      current = -1;
+      var link = tiles[i] && tiles[i].querySelector('.tile-link');
+      if (link) link.focus({ preventScroll: true });
+    }
+
+    // Safety net: if the browser closes the dialog by itself (Chrome can do
+    // this on a repeated Esc without a cancelable event), tidy up and drop the
+    // photo from the URL.
+    dialog.addEventListener('close', function () {
+      if (current < 0 || closing) return;
+      var i = current;
+      cleanup(i);
+      if (indexFromHash() >= 0) {
+        if (pushedState && history.state && history.state.viewer) history.back();
+        else history.replaceState(null, '', location.pathname + location.search);
+      }
+      pushedState = false;
+    });
+
     /** Close the dialog UI (history is handled by the caller). */
     function teardown() {
       if (!dialog.open || closing) return;
@@ -573,17 +616,8 @@
       }
 
       var finish = function () {
-        dialog.close();
-        dialog.classList.remove('is-closing');
-        root.classList.remove('viewer-open');
-        frame.getAnimations && frame.getAnimations().forEach(function (a) { a.cancel(); });
-        closing = false;
-        clearTimeout(slowTimer);
-        loadToken++;
-        if (full) { full.remove(); full = null; }
-        current = -1;
-        var link = tile && tile.querySelector('.tile-link');
-        if (link) link.focus({ preventScroll: true });
+        if (dialog.open) dialog.close();
+        cleanup(i);
       };
 
       var to = animate ? thumbRect(i) : null;
