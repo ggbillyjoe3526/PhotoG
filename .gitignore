@@ -1,0 +1,14 @@
+node_modules/
+
+# Your original photos stay on your computer: they are full size and can carry
+# GPS location and other private metadata. Only the stripped, resized copies in
+# assets/gallery/ are published. Remove these lines if you want git to back up
+# your originals too (and only do that in a private repository).
+photos/*
+!photos/details.json
+!photos/README.txt
+
+.DS_Store
+Thumbs.db
+*.log
+*.tmp-*

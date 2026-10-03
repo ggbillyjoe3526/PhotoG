@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <!-- EDIT: your name and a one-line description (shown in search results and link previews). -->
+    <title>Your Name — Photography</title>
+    <meta name="description" content="Landscape and architectural photography by Your Name.">
+    <meta name="author" content="Your Name">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Your Name — Photography">
+    <meta property="og:description" content="Landscape and architectural photography by Your Name.">
+    <!-- EDIT: once the site is live, put its address here, e.g. content="https://yourname.com/".
+         The build uses it to give link previews an absolute image URL. -->
+    <meta property="og:url" content="">
+    <!-- build:og -->
+    <meta property="og:image" content="assets/gallery/ridgelines-f9d61031-1600.jpg">
+    <meta property="og:image:width" content="1600">
+    <meta property="og:image:height" content="1067">
+    <meta property="og:image:alt" content="Five ridges stacked into the last light.">
+    <meta name="twitter:card" content="summary_large_image">
+    <!-- /build:og -->
+
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f3f3f1" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href="assets/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="assets/css/style.css">
+
+    <script>
+      // Apply the saved theme before first paint (no flash), and flag JS support.
+      (function () {
+        var root = document.documentElement;
+        root.classList.add('js');
+        try {
+          var theme = localStorage.getItem('theme');
+          if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
+          var size = localStorage.getItem('gallery-size');
+          if (size === 's' || size === 'l') root.setAttribute('data-size', size);
+        } catch (e) {}
+      })();
+    </script>
+    <script src="assets/js/main.js" defer></script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#gallery">Skip to photographs</a>
+
+    <header class="site-header">
+      <div class="brand">
+        <!-- EDIT: your name, and the short line under it. -->
+        <a class="brand-name" href="./" aria-label="Your Name — home">Your Name</a>
+        <p class="brand-line">Photographer · Landscape &amp; Architecture</p>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#work">Work</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <button class="theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch theme">
+        <svg class="icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.25"/><path d="M12 2.5v2.25M12 19.25v2.25M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.25M19.25 12h2.25M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>
+        <svg class="icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.6A8.5 8.5 0 0 1 9.4 4a8.5 8.5 0 1 0 10.6 10.6Z"/></svg>
+      </button>
+    </header>
+
+    <main id="top">
+      <section class="work" id="work" aria-labelledby="work-title">
+        <div class="section-head">
+          <h1 class="section-title" id="work-title"><span class="section-no">01</span> Selected work</h1>
+          <p class="section-meta"><!-- build:stats -->17 photographs · 2023–2024<!-- /build:stats --></p>
+          <div class="size-control" role="group" aria-label="Thumbnail size" hidden>
+            <span class="size-label" aria-hidden="true">Size</span>
+            <button type="button" data-size="s" aria-pressed="false" aria-label="Small thumbnails">S</button>
+            <button type="button" data-size="m" aria-pressed="true" aria-label="Medium thumbnails">M</button>
+            <button type="button" data-size="l" aria-pressed="false" aria-label="Large thumbnails">L</button>
+          </div>
+        </div>
+        <!-- build:gallery -->
+      <ol class="gallery" id="gallery">
+        <li class="tile" id="photo-ridgelines" style="--ar:1.5;--tint:#5b4c5f">
+          <figure>
+            <a class="tile-link" href="assets/gallery/ridgelines-f9d61031-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/ridgelines-f9d61031-480.avif 480w, assets/gallery/ridgelines-f9d61031-800.avif 800w, assets/gallery/ridgelines-f9d61031-1200.avif 1200w, assets/gallery/ridgelines-f9d61031-1600.avif 1600w, assets/gallery/ridgelines-f9d61031-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/ridgelines-f9d61031-800.jpg" srcset="assets/gallery/ridgelines-f9d61031-480.jpg 480w, assets/gallery/ridgelines-f9d61031-800.jpg 800w, assets/gallery/ridgelines-f9d61031-1200.jpg 1200w, assets/gallery/ridgelines-f9d61031-1600.jpg 1600w, assets/gallery/ridgelines-f9d61031-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="Five ridges stacked into the last light." loading="eager" fetchpriority="high" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">01</span> <span class="tile-title">Ridgelines</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-fog-ridge" style="--ar:0.6667;--tint:#868683">
+          <figure>
+            <a class="tile-link" href="assets/gallery/fog-ridge-26b78dde-1600.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/fog-ridge-26b78dde-480.avif 480w, assets/gallery/fog-ridge-26b78dde-800.avif 800w, assets/gallery/fog-ridge-26b78dde-1200.avif 1200w, assets/gallery/fog-ridge-26b78dde-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/fog-ridge-26b78dde-800.jpg" srcset="assets/gallery/fog-ridge-26b78dde-480.jpg 480w, assets/gallery/fog-ridge-26b78dde-800.jpg 800w, assets/gallery/fog-ridge-26b78dde-1200.jpg 1200w, assets/gallery/fog-ridge-26b78dde-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Morning fog settling between ridges." loading="eager" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">02</span> <span class="tile-title">Fog Line</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-horizon" style="--ar:1.7778;--tint:#76899b">
+          <figure>
+            <a class="tile-link" href="assets/gallery/horizon-c31604cb-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/horizon-c31604cb-480.avif 480w, assets/gallery/horizon-c31604cb-800.avif 800w, assets/gallery/horizon-c31604cb-1200.avif 1200w, assets/gallery/horizon-c31604cb-1600.avif 1600w, assets/gallery/horizon-c31604cb-2400.avif 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/horizon-c31604cb-800.jpg" srcset="assets/gallery/horizon-c31604cb-480.jpg 480w, assets/gallery/horizon-c31604cb-800.jpg 800w, assets/gallery/horizon-c31604cb-1200.jpg 1200w, assets/gallery/horizon-c31604cb-1600.jpg 1600w, assets/gallery/horizon-c31604cb-2400.jpg 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))" width="2400" height="1350" alt="Flat sea at first light." loading="eager" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">03</span> <span class="tile-title">Horizon, 05:58</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-dunes" style="--ar:1.5;--tint:#977963">
+          <figure>
+            <a class="tile-link" href="assets/gallery/dunes-c41f8f4b-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/dunes-c41f8f4b-480.avif 480w, assets/gallery/dunes-c41f8f4b-800.avif 800w, assets/gallery/dunes-c41f8f4b-1200.avif 1200w, assets/gallery/dunes-c41f8f4b-1600.avif 1600w, assets/gallery/dunes-c41f8f4b-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/dunes-c41f8f4b-800.jpg" srcset="assets/gallery/dunes-c41f8f4b-480.jpg 480w, assets/gallery/dunes-c41f8f4b-800.jpg 800w, assets/gallery/dunes-c41f8f4b-1200.jpg 1200w, assets/gallery/dunes-c41f8f4b-1600.jpg 1600w, assets/gallery/dunes-c41f8f4b-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="Dunes in low raking light." loading="eager" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">04</span> <span class="tile-title">Erg</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-shadow-study" style="--ar:0.8;--tint:#727272">
+          <figure>
+            <a class="tile-link" href="assets/gallery/shadow-study-de96bf64-1920.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/shadow-study-de96bf64-480.avif 480w, assets/gallery/shadow-study-de96bf64-800.avif 800w, assets/gallery/shadow-study-de96bf64-1200.avif 1200w, assets/gallery/shadow-study-de96bf64-1600.avif 1600w, assets/gallery/shadow-study-de96bf64-1920.avif 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/shadow-study-de96bf64-800.jpg" srcset="assets/gallery/shadow-study-de96bf64-480.jpg 480w, assets/gallery/shadow-study-de96bf64-800.jpg 800w, assets/gallery/shadow-study-de96bf64-1200.jpg 1200w, assets/gallery/shadow-study-de96bf64-1600.jpg 1600w, assets/gallery/shadow-study-de96bf64-1920.jpg 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))" width="1920" height="2400" alt="Hard midday light through a louvred facade." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">05</span> <span class="tile-title">Shadow Study No. 3</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-night-lights" style="--ar:1.5;--tint:#28222d">
+          <figure>
+            <a class="tile-link" href="assets/gallery/night-lights-7381fdde-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/night-lights-7381fdde-480.avif 480w, assets/gallery/night-lights-7381fdde-800.avif 800w, assets/gallery/night-lights-7381fdde-1200.avif 1200w, assets/gallery/night-lights-7381fdde-1600.avif 1600w, assets/gallery/night-lights-7381fdde-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/night-lights-7381fdde-800.jpg" srcset="assets/gallery/night-lights-7381fdde-480.jpg 480w, assets/gallery/night-lights-7381fdde-800.jpg 800w, assets/gallery/night-lights-7381fdde-1200.jpg 1200w, assets/gallery/night-lights-7381fdde-1600.jpg 1600w, assets/gallery/night-lights-7381fdde-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="City lights rendered out of focus." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">06</span> <span class="tile-title">After Hours</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-pines" style="--ar:0.6667;--tint:#626d6b">
+          <figure>
+            <a class="tile-link" href="assets/gallery/pines-f485624f-1600.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/pines-f485624f-480.avif 480w, assets/gallery/pines-f485624f-800.avif 800w, assets/gallery/pines-f485624f-1200.avif 1200w, assets/gallery/pines-f485624f-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/pines-f485624f-800.jpg" srcset="assets/gallery/pines-f485624f-480.jpg 480w, assets/gallery/pines-f485624f-800.jpg 800w, assets/gallery/pines-f485624f-1200.jpg 1200w, assets/gallery/pines-f485624f-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Layers of conifers dissolving into cloud." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">07</span> <span class="tile-title">Pines in Cloud</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-sun-disc" style="--ar:1;--tint:#7e3e2e">
+          <figure>
+            <a class="tile-link" href="assets/gallery/sun-disc-aaa4b927-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/sun-disc-aaa4b927-480.avif 480w, assets/gallery/sun-disc-aaa4b927-800.avif 800w, assets/gallery/sun-disc-aaa4b927-1200.avif 1200w, assets/gallery/sun-disc-aaa4b927-1600.avif 1600w, assets/gallery/sun-disc-aaa4b927-2400.avif 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/sun-disc-aaa4b927-800.jpg" srcset="assets/gallery/sun-disc-aaa4b927-480.jpg 480w, assets/gallery/sun-disc-aaa4b927-800.jpg 800w, assets/gallery/sun-disc-aaa4b927-1200.jpg 1200w, assets/gallery/sun-disc-aaa4b927-1600.jpg 1600w, assets/gallery/sun-disc-aaa4b927-2400.jpg 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))" width="2400" height="2400" alt="The sun touching the Atlantic." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">08</span> <span class="tile-title">Sun Disc</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-panorama" style="--ar:3;--tint:#263354">
+          <figure>
+            <a class="tile-link" href="assets/gallery/panorama-d12d5ece-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/panorama-d12d5ece-480.avif 480w, assets/gallery/panorama-d12d5ece-800.avif 800w, assets/gallery/panorama-d12d5ece-1200.avif 1200w, assets/gallery/panorama-d12d5ece-1600.avif 1600w, assets/gallery/panorama-d12d5ece-2400.avif 2400w" sizes="min(100vw, calc(3.45 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/panorama-d12d5ece-800.jpg" srcset="assets/gallery/panorama-d12d5ece-480.jpg 480w, assets/gallery/panorama-d12d5ece-800.jpg 800w, assets/gallery/panorama-d12d5ece-1200.jpg 1200w, assets/gallery/panorama-d12d5ece-1600.jpg 1600w, assets/gallery/panorama-d12d5ece-2400.jpg 2400w" sizes="min(100vw, calc(3.45 * clamp(170px, 20vw, 360px)))" width="2400" height="800" alt="Stitched panorama, five frames." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">09</span> <span class="tile-title">Blue Hour Range</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-window-light" style="--ar:0.8;--tint:#493d30">
+          <figure>
+            <a class="tile-link" href="assets/gallery/window-light-20a1eefe-1920.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/window-light-20a1eefe-480.avif 480w, assets/gallery/window-light-20a1eefe-800.avif 800w, assets/gallery/window-light-20a1eefe-1200.avif 1200w, assets/gallery/window-light-20a1eefe-1600.avif 1600w, assets/gallery/window-light-20a1eefe-1920.avif 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/window-light-20a1eefe-800.jpg" srcset="assets/gallery/window-light-20a1eefe-480.jpg 480w, assets/gallery/window-light-20a1eefe-800.jpg 800w, assets/gallery/window-light-20a1eefe-1200.jpg 1200w, assets/gallery/window-light-20a1eefe-1600.jpg 1600w, assets/gallery/window-light-20a1eefe-1920.jpg 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))" width="1920" height="2400" alt="Winter afternoon light on a plaster wall." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">10</span> <span class="tile-title">Window, 15:14</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-snowfield" style="--ar:1.5;--tint:#dee3e7">
+          <figure>
+            <a class="tile-link" href="assets/gallery/snowfield-f9451435-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/snowfield-f9451435-480.avif 480w, assets/gallery/snowfield-f9451435-800.avif 800w, assets/gallery/snowfield-f9451435-1200.avif 1200w, assets/gallery/snowfield-f9451435-1600.avif 1600w, assets/gallery/snowfield-f9451435-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/snowfield-f9451435-800.jpg" srcset="assets/gallery/snowfield-f9451435-480.jpg 480w, assets/gallery/snowfield-f9451435-800.jpg 800w, assets/gallery/snowfield-f9451435-1200.jpg 1200w, assets/gallery/snowfield-f9451435-1600.jpg 1600w, assets/gallery/snowfield-f9451435-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="A row of spruce on an open snowfield." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">11</span> <span class="tile-title">Treeline</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-tide" style="--ar:0.6667;--tint:#6b716b">
+          <figure>
+            <a class="tile-link" href="assets/gallery/tide-d84123e2-1600.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/tide-d84123e2-480.avif 480w, assets/gallery/tide-d84123e2-800.avif 800w, assets/gallery/tide-d84123e2-1200.avif 1200w, assets/gallery/tide-d84123e2-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/tide-d84123e2-800.jpg" srcset="assets/gallery/tide-d84123e2-480.jpg 480w, assets/gallery/tide-d84123e2-800.jpg 800w, assets/gallery/tide-d84123e2-1200.jpg 1200w, assets/gallery/tide-d84123e2-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Shot from a headland, looking straight down." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">12</span> <span class="tile-title">Tide Edge</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-concrete" style="--ar:1;--tint:#959595">
+          <figure>
+            <a class="tile-link" href="assets/gallery/concrete-14d3d93b-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/concrete-14d3d93b-480.avif 480w, assets/gallery/concrete-14d3d93b-800.avif 800w, assets/gallery/concrete-14d3d93b-1200.avif 1200w, assets/gallery/concrete-14d3d93b-1600.avif 1600w, assets/gallery/concrete-14d3d93b-2400.avif 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/concrete-14d3d93b-800.jpg" srcset="assets/gallery/concrete-14d3d93b-480.jpg 480w, assets/gallery/concrete-14d3d93b-800.jpg 800w, assets/gallery/concrete-14d3d93b-1200.jpg 1200w, assets/gallery/concrete-14d3d93b-1600.jpg 1600w, assets/gallery/concrete-14d3d93b-2400.jpg 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))" width="2400" height="2400" alt="Brutalist geometry under an overcast sky." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">13</span> <span class="tile-title">Planes</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-aurora" style="--ar:1.7778;--tint:#0c2023">
+          <figure>
+            <a class="tile-link" href="assets/gallery/aurora-421c9a96-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/aurora-421c9a96-480.avif 480w, assets/gallery/aurora-421c9a96-800.avif 800w, assets/gallery/aurora-421c9a96-1200.avif 1200w, assets/gallery/aurora-421c9a96-1600.avif 1600w, assets/gallery/aurora-421c9a96-2400.avif 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/aurora-421c9a96-800.jpg" srcset="assets/gallery/aurora-421c9a96-480.jpg 480w, assets/gallery/aurora-421c9a96-800.jpg 800w, assets/gallery/aurora-421c9a96-1200.jpg 1200w, assets/gallery/aurora-421c9a96-1600.jpg 1600w, assets/gallery/aurora-421c9a96-2400.jpg 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))" width="2400" height="1350" alt="Aurora over the fjord ridge." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">14</span> <span class="tile-title">Corona</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-canyon" style="--ar:0.6667;--tint:#61311c">
+          <figure>
+            <a class="tile-link" href="assets/gallery/canyon-7c0ed413-1600.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/canyon-7c0ed413-480.avif 480w, assets/gallery/canyon-7c0ed413-800.avif 800w, assets/gallery/canyon-7c0ed413-1200.avif 1200w, assets/gallery/canyon-7c0ed413-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/canyon-7c0ed413-800.jpg" srcset="assets/gallery/canyon-7c0ed413-480.jpg 480w, assets/gallery/canyon-7c0ed413-800.jpg 800w, assets/gallery/canyon-7c0ed413-1200.jpg 1200w, assets/gallery/canyon-7c0ed413-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Reflected light inside a slot canyon." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">15</span> <span class="tile-title">Slot</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-lake" style="--ar:1.5;--tint:#a09fb5">
+          <figure>
+            <a class="tile-link" href="assets/gallery/lake-ff0898c9-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/lake-ff0898c9-480.avif 480w, assets/gallery/lake-ff0898c9-800.avif 800w, assets/gallery/lake-ff0898c9-1200.avif 1200w, assets/gallery/lake-ff0898c9-1600.avif 1600w, assets/gallery/lake-ff0898c9-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/lake-ff0898c9-800.jpg" srcset="assets/gallery/lake-ff0898c9-480.jpg 480w, assets/gallery/lake-ff0898c9-800.jpg 800w, assets/gallery/lake-ff0898c9-1200.jpg 1200w, assets/gallery/lake-ff0898c9-1600.jpg 1600w, assets/gallery/lake-ff0898c9-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="A windless dawn doubles the range." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">16</span> <span class="tile-title">Still Water</span></figcaption>
+          </figure>
+        </li>
+        <li class="tile" id="photo-salt-flat" style="--ar:2.3346;--tint:#cacfd2">
+          <figure>
+            <a class="tile-link" href="assets/gallery/salt-flat-5b0b173e-2400.jpg">
+              <picture>
+                <source type="image/avif" srcset="assets/gallery/salt-flat-5b0b173e-480.avif 480w, assets/gallery/salt-flat-5b0b173e-800.avif 800w, assets/gallery/salt-flat-5b0b173e-1200.avif 1200w, assets/gallery/salt-flat-5b0b173e-1600.avif 1600w, assets/gallery/salt-flat-5b0b173e-2400.avif 2400w" sizes="min(100vw, calc(2.685 * clamp(170px, 20vw, 360px)))">
+                <img src="assets/gallery/salt-flat-5b0b173e-800.jpg" srcset="assets/gallery/salt-flat-5b0b173e-480.jpg 480w, assets/gallery/salt-flat-5b0b173e-800.jpg 800w, assets/gallery/salt-flat-5b0b173e-1200.jpg 1200w, assets/gallery/salt-flat-5b0b173e-1600.jpg 1600w, assets/gallery/salt-flat-5b0b173e-2400.jpg 2400w" sizes="min(100vw, calc(2.685 * clamp(170px, 20vw, 360px)))" width="2400" height="1028" alt="A single figure on the salt crust." loading="lazy" decoding="async">
+              </picture>
+            </a>
+            <figcaption class="tile-caption"><span class="tile-no">17</span> <span class="tile-title">Figure, Salt Flat</span></figcaption>
+          </figure>
+        </li>
+      </ol>
+      <script type="application/json" id="gallery-data">[{"id":"ridgelines","title":"Ridgelines","caption":"Five ridges stacked into the last light.","location":"Dolomites, Italy","date":"2024-10-12","width":2400,"height":1600,"tint":"#5b4c5f","exif":{"camera":"Fujifilm X-T5","lens":"XF70-300mmF4-5.6 R LM OIS WR","focal":"210mm","focal35":"315mm","aperture":"f/8","shutter":"1/320s","iso":"ISO 160"}},{"id":"fog-ridge","title":"Fog Line","caption":"Morning fog settling between ridges.","location":"Black Forest, Germany","date":"2023-11-03","width":1600,"height":2400,"tint":"#868683","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/5.6","shutter":"1/250s","iso":"ISO 100"}},{"id":"horizon","title":"Horizon, 05:58","caption":"Flat sea at first light.","location":"Lofoten, Norway","date":"2024-06-21","width":2400,"height":1350,"tint":"#76899b","exif":{"camera":"Sony A7R V","lens":"FE 24-70mm F2.8 GM II","focal":"52mm","aperture":"f/11","shutter":"1/125s","iso":"ISO 100"}},{"id":"dunes","title":"Erg","caption":"Dunes in low raking light.","location":"Merzouga, Morocco","date":"2024-03-02","width":2400,"height":1600,"tint":"#977963","exif":{"camera":"Canon EOS R5","lens":"RF100-500mm F4.5-7.1 L IS USM","focal":"340mm","aperture":"f/9","shutter":"1/500s","iso":"ISO 200"}},{"id":"shadow-study","title":"Shadow Study No. 3","caption":"Hard midday light through a louvred facade.","location":"Lisbon, Portugal","date":"2023-08-15","width":1920,"height":2400,"tint":"#727272","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/8","shutter":"1/1000s","iso":"ISO 200"}},{"id":"night-lights","title":"After Hours","caption":"City lights rendered out of focus.","location":"Tokyo, Japan","date":"2024-12-19","width":2400,"height":1600,"tint":"#28222d","exif":{"camera":"Fujifilm X-T5","lens":"XF56mmF1.2 R WR","focal":"56mm","focal35":"84mm","aperture":"f/1.2","shutter":"1/60s","iso":"ISO 3200"}},{"id":"pines","title":"Pines in Cloud","caption":"Layers of conifers dissolving into cloud.","location":"Hokkaido, Japan","date":"2023-10-28","width":1600,"height":2400,"tint":"#626d6b","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 70-200mm f/2.8 VR S","focal":"135mm","aperture":"f/5.6","shutter":"1/200s","iso":"ISO 400"}},{"id":"sun-disc","title":"Sun Disc","caption":"The sun touching the Atlantic.","location":"Algarve, Portugal","date":"2024-08-09","width":2400,"height":2400,"tint":"#7e3e2e","exif":{"camera":"Canon EOS R5","lens":"RF800mm F11 IS STM","focal":"800mm","aperture":"f/11","shutter":"1/2000s","iso":"ISO 100"}},{"id":"panorama","title":"Blue Hour Range","caption":"Stitched panorama, five frames.","location":"Patagonia, Chile","date":"2024-01-17","width":2400,"height":800,"tint":"#263354","exif":{"camera":"Sony A7R V","lens":"FE 70-200mm F2.8 GM OSS II","focal":"105mm","aperture":"f/8","shutter":"2s","iso":"ISO 100"}},{"id":"window-light","title":"Window, 15:14","caption":"Winter afternoon light on a plaster wall.","location":"Copenhagen, Denmark","date":"2023-12-02","width":1920,"height":2400,"tint":"#493d30","exif":{"camera":"Fujifilm X-T5","lens":"XF23mmF1.4 R LM WR","focal":"23mm","focal35":"35mm","aperture":"f/2.8","shutter":"1/60s","iso":"ISO 800"}},{"id":"snowfield","title":"Treeline","caption":"A row of spruce on an open snowfield.","location":"Lapland, Finland","date":"2024-02-11","width":2400,"height":1600,"tint":"#dee3e7","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 24-120mm f/4 S","focal":"120mm","aperture":"f/8","shutter":"1/800s","iso":"ISO 64"}},{"id":"tide","title":"Tide Edge","caption":"Shot from a headland, looking straight down.","location":"Isle of Harris, Scotland","date":"2023-09-22","width":1600,"height":2400,"tint":"#6b716b","exif":{"camera":"Canon EOS R5","lens":"RF24-105mm F4 L IS USM","focal":"24mm","aperture":"f/11","shutter":"1/2s","iso":"ISO 50"}},{"id":"concrete","title":"Planes","caption":"Brutalist geometry under an overcast sky.","location":"Chandigarh, India","date":"2024-04-06","width":2400,"height":2400,"tint":"#959595","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/4","shutter":"1/500s","iso":"ISO 100"}},{"id":"aurora","title":"Corona","caption":"Aurora over the fjord ridge.","location":"Tromsø, Norway","date":"2024-03-24","width":2400,"height":1350,"tint":"#0c2023","exif":{"camera":"Sony A7R V","lens":"FE 14mm F1.8 GM","focal":"14mm","aperture":"f/1.8","shutter":"8s","iso":"ISO 1600"}},{"id":"canyon","title":"Slot","caption":"Reflected light inside a slot canyon.","location":"Page, Arizona, USA","date":"2023-05-30","width":1600,"height":2400,"tint":"#61311c","exif":{"camera":"Fujifilm X-T5","lens":"XF16mmF1.4 R WR","focal":"16mm","focal35":"24mm","aperture":"f/8","shutter":"1/30s","iso":"ISO 400"}},{"id":"lake","title":"Still Water","caption":"A windless dawn doubles the range.","location":"Lake Bled, Slovenia","date":"2024-09-14","width":2400,"height":1600,"tint":"#a09fb5","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 24-120mm f/4 S","focal":"58mm","aperture":"f/9","shutter":"1/60s","iso":"ISO 100"}},{"id":"salt-flat","title":"Figure, Salt Flat","caption":"A single figure on the salt crust.","location":"Salar de Uyuni, Bolivia","date":"2024-07-04","width":2400,"height":1028,"tint":"#cacfd2","exif":{"camera":"Sony A7R V","lens":"FE 24-70mm F2.8 GM II","focal":"70mm","aperture":"f/8","shutter":"1/1600s","iso":"ISO 100"}}]</script>
+      <!-- /build:gallery -->
+      </section>
+
+      <section class="about" id="about" aria-labelledby="about-title">
+        <h2 class="section-title" id="about-title"><span class="section-no">02</span> About</h2>
+        <div class="about-body">
+          <!-- EDIT: a few sentences about you and your work. -->
+          <p class="lede">Your Name is a photographer working with landscape, light and the quiet geometry of built places.</p>
+          <p>Replace this paragraph with a short biography: where you are based, what you photograph and why, and the kind of work you take on. Two or three sentences is plenty; the photographs do the talking.</p>
+          <!-- EDIT: facts shown as a list. Add, remove or rename rows freely. -->
+          <dl class="facts">
+            <div><dt>Based in</dt><dd>City, Country</dd></div>
+            <div><dt>Available for</dt><dd>Commissions, editorial, fine-art prints</dd></div>
+            <div><dt>Selected clients</dt><dd>Client One, Client Two, Client Three</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="contact" id="contact" aria-labelledby="contact-title">
+        <h2 class="section-title" id="contact-title"><span class="section-no">03</span> Contact</h2>
+        <div class="contact-body">
+          <!-- EDIT: your email address (both the link and the text) and your profiles. -->
+          <p class="contact-intro">For commissions, licensing and print enquiries:</p>
+          <a class="contact-email" href="mailto:hello@example.com">hello@example.com</a>
+          <ul class="contact-links">
+            <li><a href="https://instagram.com/" rel="me noopener" target="_blank">Instagram<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.linkedin.com/" rel="me noopener" target="_blank">LinkedIn<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© <span data-year>2026</span> Your Name. All rights reserved.</p>
+      <a href="#top" class="to-top">Back to top</a>
+    </footer>
+  </body>
+</html>
