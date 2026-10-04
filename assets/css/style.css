@@ -38,7 +38,9 @@
   --gutter: clamp(16px, 3.2vw, 48px);
   --gap: clamp(6px, 0.75vw, 12px);
   --row-gap: clamp(18px, 1.8vw, 26px);
-  --row-h: clamp(170px, 20vw, 360px); /* used without JavaScript; matches ROW in main.js */
+  --row-h: clamp(220px, calc(200px + 9vw), 440px); /* without JS; mirrors baseRowHeight() in layout.js */
+  /* Side margins; on very wide screens the page stops growing at 2200px. */
+  --page-gutter: max(var(--gutter), calc((100vw - 2200px) / 2));
   --section-space: clamp(88px, 11vw, 176px);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
@@ -148,8 +150,8 @@ button {
 
 .skip-link {
   position: absolute;
-  top: 12px;
-  left: var(--gutter);
+  top: 10px;
+  left: 50%;
   z-index: 10;
   padding: 8px 12px;
   background: var(--fg);
@@ -157,11 +159,12 @@ button {
   font: 500 12px/1 var(--font-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  transform: translateY(-200%);
+  white-space: nowrap;
+  transform: translate(-50%, -200%);
 }
 
 .skip-link:focus {
-  transform: none;
+  transform: translate(-50%, 0);
 }
 
 /* Small technical labels share one voice. */
@@ -175,7 +178,7 @@ button {
 .site-footer,
 .tile-caption {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: clamp(11.5px, calc(8px + 0.2vw), 13px);
   line-height: 1.4;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -188,15 +191,19 @@ button {
   grid-template-columns: 1fr auto auto;
   align-items: start;
   gap: 8px 28px;
-  padding: clamp(20px, 2.6vw, 34px) var(--gutter) clamp(36px, 5vw, 72px);
+  padding: clamp(20px, 2.6vw, 34px) var(--page-gutter) clamp(36px, 5vw, 72px);
 }
 
 .brand-name {
-  display: inline-block;
-  font-size: 17px;
+  margin: 0;
+  font-size: clamp(17px, calc(13px + 0.25vw), 19px);
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.01em;
+}
+
+.brand-name a {
+  display: inline-block;
 }
 
 .brand-line {
@@ -242,6 +249,11 @@ button {
   color: var(--fg);
 }
 
+/* Shown once main.js has wired it up (no dead button if the script fails). */
+.theme-toggle:not(.is-ready) {
+  visibility: hidden;
+}
+
 html:not(.js) .theme-toggle {
   display: none;
 }
@@ -284,7 +296,7 @@ html:not(.js) .site-header {
 /* ------------------------------------------------------- section heads */
 
 main > section {
-  margin: 0 var(--gutter);
+  margin: 0 var(--page-gutter);
 }
 
 main > section + section {
@@ -325,7 +337,11 @@ main > section + section {
   color: var(--fg-muted);
 }
 
-.size-control[hidden] {
+.size-control:not(.is-ready) {
+  visibility: hidden; /* keeps its space, so nothing shifts when it appears */
+}
+
+html:not(.js) .size-control {
   display: none;
 }
 
@@ -374,11 +390,11 @@ main > section + section {
 }
 
 .tile {
-  flex: calc(var(--ar) * 100) 1 calc(var(--ar) * var(--row-h));
+  /* Rows grow to fill the width, so start a little under the target height. */
+  flex: calc(var(--ar) * 100) 1 calc(var(--ar) * var(--row-h) * 0.8);
   max-width: calc(var(--ar) * var(--row-h) * 1.8);
   min-width: 0;
   scroll-margin-top: 24px;
-  container-type: inline-size;
 }
 
 .tile figure {
@@ -420,24 +436,25 @@ main > section + section {
 
 .tile-no {
   flex: none;
-  color: var(--fg-faint);
 }
 
 .tile-title {
   overflow: hidden;
+  color: var(--fg);
   text-overflow: ellipsis;
-}
-
-/* Narrow tiles show just the frame number rather than a clipped title. */
-@container (max-width: 130px) {
-  .tile-title {
-    display: none;
-  }
 }
 
 .tile:hover .tile-caption,
 .tile:focus-within .tile-caption {
   color: var(--fg);
+}
+
+/* Phones show frame numbers only (titles are in the viewer), except at L,
+   where each photo has the full width. */
+@media (max-width: 599px) {
+  html.js:not([data-size="l"]) .tile-title {
+    display: none;
+  }
 }
 
 .tile-link:focus-visible {
@@ -464,21 +481,14 @@ main > section + section {
   aspect-ratio: auto;
 }
 
-html.js .gallery:not(.is-justified) {
-  opacity: 0;
-  /* Fail-safe: reveal the CSS layout if the script never runs. */
-  animation: reveal 0s linear 2s forwards;
-}
-
-@keyframes reveal {
-  to {
-    opacity: 1;
-  }
-}
-
-/* At the smallest size, captions would just add noise. */
+/* At the smallest size, captions would just add noise; rows sit as close
+   together as the photos beside each other. */
 html[data-size="s"] .tile-caption {
   display: none;
+}
+
+html[data-size="s"] .gallery {
+  row-gap: var(--gap);
 }
 
 /* ---------------------------------------------------------------- about */
@@ -487,6 +497,7 @@ html[data-size="s"] .tile-caption {
 .contact {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: baseline; /* the label sits on the first line of text */
   column-gap: var(--gap);
   padding-top: 12px;
   border-top: 1px solid var(--line);
@@ -504,7 +515,7 @@ html[data-size="s"] .tile-caption {
 
 .lede {
   max-width: 24ch;
-  margin: -0.3em 0 0.9em;
+  margin: 0 0 0.9em;
   font-size: clamp(24px, 2.7vw, 38px);
   font-weight: 400;
   line-height: 1.18;
@@ -614,7 +625,7 @@ html[data-size="s"] .tile-caption {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px 24px;
-  margin: var(--section-space) var(--gutter) 0;
+  margin: var(--section-space) var(--page-gutter) 0;
   padding: 14px 0 max(28px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   color: var(--fg-muted);
@@ -622,6 +633,31 @@ html[data-size="s"] .tile-caption {
 
 .site-footer p {
   margin: 0;
+}
+
+/* -------------------------------------------------------- touch targets */
+
+/* On touch screens, small controls get a 44px hit area without moving. */
+@media (pointer: coarse) {
+  .site-nav a,
+  .to-top,
+  .contact-links a {
+    display: inline-block;
+    margin: -14px 0;
+    padding: 14px 0;
+  }
+
+  .size-control button {
+    min-width: 40px;
+    margin: -14px 0;
+    padding: 14px 6px;
+  }
+
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
+    margin: -12px -12px 0 0;
+  }
 }
 
 /* --------------------------------------------------------------- viewer */

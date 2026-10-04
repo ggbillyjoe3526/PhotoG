@@ -1,0 +1,31 @@
+{
+  "_help": [
+    "Your details for the website. Edit the text between the quotes, then run `npm run build`.",
+    "Leave \"url\" empty until the site is live, then set it (e.g. \"https://yourname.com/\") so link previews show your photo.",
+    "\"facts\" and \"links\" are lists of \"Label\": \"value\" pairs: add, remove or rename them freely.",
+    "Leave \"email\" empty to show only the links."
+  ],
+  "name": "Your Name",
+  "tagline": "Photographer · Landscape & Architecture",
+  "description": "Landscape and architectural photography by Your Name.",
+  "url": "",
+  "about": {
+    "lede": "Your Name is a photographer working with landscape, light and the quiet geometry of built places.",
+    "text": [
+      "Replace this paragraph with a short biography: where you are based, what you photograph and why, and the kind of work you take on. Two or three sentences is plenty; the photographs do the talking."
+    ],
+    "facts": {
+      "Based in": "City, Country",
+      "Available for": "Commissions, editorial, fine-art prints",
+      "Selected clients": "Client One, Client Two, Client Three"
+    }
+  },
+  "contact": {
+    "intro": "For commissions, licensing and print enquiries:",
+    "email": "hello@example.com",
+    "links": {
+      "Instagram": "https://instagram.com/",
+      "LinkedIn": "https://www.linkedin.com/"
+    }
+  }
+}

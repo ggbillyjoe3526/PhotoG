@@ -4,34 +4,35 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-    <!-- EDIT: your name and a one-line description (shown in search results and link previews). -->
+    <!-- Your name, description and web address live in site.json, and
+         `npm run build` writes them into the build:… regions on this page.
+         Don't edit inside those regions: the build replaces them. -->
+    <!-- build:meta -->
     <title>Your Name — Photography</title>
     <meta name="description" content="Landscape and architectural photography by Your Name.">
     <meta name="author" content="Your Name">
-
     <meta property="og:type" content="website">
     <meta property="og:title" content="Your Name — Photography">
     <meta property="og:description" content="Landscape and architectural photography by Your Name.">
-    <!-- EDIT: once the site is live, put its address here, e.g. content="https://yourname.com/".
-         The build uses it to give link previews an absolute image URL. -->
-    <meta property="og:url" content="">
-    <!-- build:og -->
     <meta property="og:image" content="assets/gallery/ridgelines-f9d61031-1600.jpg">
     <meta property="og:image:width" content="1600">
     <meta property="og:image:height" content="1067">
     <meta property="og:image:alt" content="Five ridges stacked into the last light.">
     <meta name="twitter:card" content="summary_large_image">
-    <!-- /build:og -->
+    <!-- /build:meta -->
 
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f3f3f1" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0e0e0e" media="(prefers-color-scheme: dark)">
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="assets/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="assets/css/style.css">
 
     <script>
-      // Apply the saved theme before first paint (no flash), and flag JS support.
+      // Apply the saved theme and thumbnail size before first paint (no
+      // flash), and flag JS support.
       (function () {
         var root = document.documentElement;
         root.classList.add('js');
@@ -46,15 +47,14 @@
     <script src="assets/js/main.js" defer></script>
   </head>
 
-  <body>
+  <body id="top">
     <a class="skip-link" href="#gallery">Skip to photographs</a>
 
     <header class="site-header">
-      <div class="brand">
-        <!-- EDIT: your name, and the short line under it. -->
-        <a class="brand-name" href="./" aria-label="Your Name — home">Your Name</a>
+      <div class="brand"><!-- build:brand -->
+        <h1 class="brand-name"><a href="./">Your Name</a></h1>
         <p class="brand-line">Photographer · Landscape &amp; Architecture</p>
-      </div>
+      <!-- /build:brand --></div>
       <nav class="site-nav" aria-label="Primary">
         <a href="#work">Work</a>
         <a href="#about">About</a>
@@ -66,12 +66,12 @@
       </button>
     </header>
 
-    <main id="top">
+    <main>
       <section class="work" id="work" aria-labelledby="work-title">
         <div class="section-head">
-          <h1 class="section-title" id="work-title"><span class="section-no">01</span> Selected work</h1>
+          <h2 class="section-title" id="work-title"><span class="section-no" aria-hidden="true">01</span> Selected work</h2>
           <p class="section-meta"><!-- build:stats -->17 photographs · 2023–2024<!-- /build:stats --></p>
-          <div class="size-control" role="group" aria-label="Thumbnail size" hidden>
+          <div class="size-control" role="group" aria-label="Thumbnail size">
             <span class="size-label" aria-hidden="true">Size</span>
             <button type="button" data-size="s" aria-pressed="false" aria-label="Small thumbnails">S</button>
             <button type="button" data-size="m" aria-pressed="true" aria-label="Medium thumbnails">M</button>
@@ -82,227 +82,401 @@
       <ol class="gallery" id="gallery">
         <li class="tile" id="photo-ridgelines" style="--ar:1.5;--tint:#5b4c5f">
           <figure>
-            <a class="tile-link" href="assets/gallery/ridgelines-f9d61031-2400.jpg">
+            <a class="tile-link" href="assets/gallery/ridgelines-f9d61031-2400.jpg" aria-describedby="caption-ridgelines">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/ridgelines-f9d61031-480.avif 480w, assets/gallery/ridgelines-f9d61031-800.avif 800w, assets/gallery/ridgelines-f9d61031-1200.avif 1200w, assets/gallery/ridgelines-f9d61031-1600.avif 1600w, assets/gallery/ridgelines-f9d61031-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/ridgelines-f9d61031-800.jpg" srcset="assets/gallery/ridgelines-f9d61031-480.jpg 480w, assets/gallery/ridgelines-f9d61031-800.jpg 800w, assets/gallery/ridgelines-f9d61031-1200.jpg 1200w, assets/gallery/ridgelines-f9d61031-1600.jpg 1600w, assets/gallery/ridgelines-f9d61031-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="Five ridges stacked into the last light." loading="eager" fetchpriority="high" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/ridgelines-f9d61031-480.avif 480w, assets/gallery/ridgelines-f9d61031-800.avif 800w, assets/gallery/ridgelines-f9d61031-1200.avif 1200w, assets/gallery/ridgelines-f9d61031-1600.avif 1600w, assets/gallery/ridgelines-f9d61031-2400.avif 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/ridgelines-f9d61031-800.jpg" srcset="assets/gallery/ridgelines-f9d61031-480.jpg 480w, assets/gallery/ridgelines-f9d61031-800.jpg 800w, assets/gallery/ridgelines-f9d61031-1200.jpg 1200w, assets/gallery/ridgelines-f9d61031-1600.jpg 1600w, assets/gallery/ridgelines-f9d61031-2400.jpg 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1600" alt="Five ridges stacked into the last light." loading="eager" fetchpriority="high" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">01</span> <span class="tile-title">Ridgelines</span></figcaption>
+            <figcaption class="tile-caption" id="caption-ridgelines"><span class="tile-no">01</span> <span class="tile-title">Ridgelines</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-fog-ridge" style="--ar:0.6667;--tint:#868683">
           <figure>
-            <a class="tile-link" href="assets/gallery/fog-ridge-26b78dde-1600.jpg">
+            <a class="tile-link" href="assets/gallery/fog-ridge-26b78dde-1600.jpg" aria-describedby="caption-fog-ridge">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/fog-ridge-26b78dde-480.avif 480w, assets/gallery/fog-ridge-26b78dde-800.avif 800w, assets/gallery/fog-ridge-26b78dde-1200.avif 1200w, assets/gallery/fog-ridge-26b78dde-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/fog-ridge-26b78dde-800.jpg" srcset="assets/gallery/fog-ridge-26b78dde-480.jpg 480w, assets/gallery/fog-ridge-26b78dde-800.jpg 800w, assets/gallery/fog-ridge-26b78dde-1200.jpg 1200w, assets/gallery/fog-ridge-26b78dde-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Morning fog settling between ridges." loading="eager" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/fog-ridge-26b78dde-480.avif 480w, assets/gallery/fog-ridge-26b78dde-800.avif 800w, assets/gallery/fog-ridge-26b78dde-1200.avif 1200w, assets/gallery/fog-ridge-26b78dde-1600.avif 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/fog-ridge-26b78dde-800.jpg" srcset="assets/gallery/fog-ridge-26b78dde-480.jpg 480w, assets/gallery/fog-ridge-26b78dde-800.jpg 800w, assets/gallery/fog-ridge-26b78dde-1200.jpg 1200w, assets/gallery/fog-ridge-26b78dde-1600.jpg 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))" width="1600" height="2400" alt="Morning fog settling between ridges." loading="eager" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">02</span> <span class="tile-title">Fog Line</span></figcaption>
+            <figcaption class="tile-caption" id="caption-fog-ridge"><span class="tile-no">02</span> <span class="tile-title">Fog Line</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-horizon" style="--ar:1.7778;--tint:#76899b">
           <figure>
-            <a class="tile-link" href="assets/gallery/horizon-c31604cb-2400.jpg">
+            <a class="tile-link" href="assets/gallery/horizon-c31604cb-2400.jpg" aria-describedby="caption-horizon">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/horizon-c31604cb-480.avif 480w, assets/gallery/horizon-c31604cb-800.avif 800w, assets/gallery/horizon-c31604cb-1200.avif 1200w, assets/gallery/horizon-c31604cb-1600.avif 1600w, assets/gallery/horizon-c31604cb-2400.avif 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/horizon-c31604cb-800.jpg" srcset="assets/gallery/horizon-c31604cb-480.jpg 480w, assets/gallery/horizon-c31604cb-800.jpg 800w, assets/gallery/horizon-c31604cb-1200.jpg 1200w, assets/gallery/horizon-c31604cb-1600.jpg 1600w, assets/gallery/horizon-c31604cb-2400.jpg 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))" width="2400" height="1350" alt="Flat sea at first light." loading="eager" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/horizon-c31604cb-480.avif 480w, assets/gallery/horizon-c31604cb-800.avif 800w, assets/gallery/horizon-c31604cb-1200.avif 1200w, assets/gallery/horizon-c31604cb-1600.avif 1600w, assets/gallery/horizon-c31604cb-2400.avif 2400w" sizes="min(100vw, calc(1.956 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/horizon-c31604cb-800.jpg" srcset="assets/gallery/horizon-c31604cb-480.jpg 480w, assets/gallery/horizon-c31604cb-800.jpg 800w, assets/gallery/horizon-c31604cb-1200.jpg 1200w, assets/gallery/horizon-c31604cb-1600.jpg 1600w, assets/gallery/horizon-c31604cb-2400.jpg 2400w" sizes="min(100vw, calc(1.956 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1350" alt="Flat sea at first light." loading="eager" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">03</span> <span class="tile-title">Horizon, 05:58</span></figcaption>
+            <figcaption class="tile-caption" id="caption-horizon"><span class="tile-no">03</span> <span class="tile-title">Horizon, 05:58</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-dunes" style="--ar:1.5;--tint:#977963">
           <figure>
-            <a class="tile-link" href="assets/gallery/dunes-c41f8f4b-2400.jpg">
+            <a class="tile-link" href="assets/gallery/dunes-c41f8f4b-2400.jpg" aria-describedby="caption-dunes">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/dunes-c41f8f4b-480.avif 480w, assets/gallery/dunes-c41f8f4b-800.avif 800w, assets/gallery/dunes-c41f8f4b-1200.avif 1200w, assets/gallery/dunes-c41f8f4b-1600.avif 1600w, assets/gallery/dunes-c41f8f4b-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/dunes-c41f8f4b-800.jpg" srcset="assets/gallery/dunes-c41f8f4b-480.jpg 480w, assets/gallery/dunes-c41f8f4b-800.jpg 800w, assets/gallery/dunes-c41f8f4b-1200.jpg 1200w, assets/gallery/dunes-c41f8f4b-1600.jpg 1600w, assets/gallery/dunes-c41f8f4b-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="Dunes in low raking light." loading="eager" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/dunes-c41f8f4b-480.avif 480w, assets/gallery/dunes-c41f8f4b-800.avif 800w, assets/gallery/dunes-c41f8f4b-1200.avif 1200w, assets/gallery/dunes-c41f8f4b-1600.avif 1600w, assets/gallery/dunes-c41f8f4b-2400.avif 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/dunes-c41f8f4b-800.jpg" srcset="assets/gallery/dunes-c41f8f4b-480.jpg 480w, assets/gallery/dunes-c41f8f4b-800.jpg 800w, assets/gallery/dunes-c41f8f4b-1200.jpg 1200w, assets/gallery/dunes-c41f8f4b-1600.jpg 1600w, assets/gallery/dunes-c41f8f4b-2400.jpg 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1600" alt="Dunes in low raking light." loading="eager" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">04</span> <span class="tile-title">Erg</span></figcaption>
+            <figcaption class="tile-caption" id="caption-dunes"><span class="tile-no">04</span> <span class="tile-title">Erg</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-shadow-study" style="--ar:0.8;--tint:#727272">
           <figure>
-            <a class="tile-link" href="assets/gallery/shadow-study-de96bf64-1920.jpg">
+            <a class="tile-link" href="assets/gallery/shadow-study-de96bf64-1920.jpg" aria-describedby="caption-shadow-study">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/shadow-study-de96bf64-480.avif 480w, assets/gallery/shadow-study-de96bf64-800.avif 800w, assets/gallery/shadow-study-de96bf64-1200.avif 1200w, assets/gallery/shadow-study-de96bf64-1600.avif 1600w, assets/gallery/shadow-study-de96bf64-1920.avif 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/shadow-study-de96bf64-800.jpg" srcset="assets/gallery/shadow-study-de96bf64-480.jpg 480w, assets/gallery/shadow-study-de96bf64-800.jpg 800w, assets/gallery/shadow-study-de96bf64-1200.jpg 1200w, assets/gallery/shadow-study-de96bf64-1600.jpg 1600w, assets/gallery/shadow-study-de96bf64-1920.jpg 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))" width="1920" height="2400" alt="Hard midday light through a louvred facade." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/shadow-study-de96bf64-480.avif 480w, assets/gallery/shadow-study-de96bf64-800.avif 800w, assets/gallery/shadow-study-de96bf64-1200.avif 1200w, assets/gallery/shadow-study-de96bf64-1600.avif 1600w, assets/gallery/shadow-study-de96bf64-1920.avif 1920w" sizes="min(100vw, calc(0.88 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/shadow-study-de96bf64-800.jpg" srcset="assets/gallery/shadow-study-de96bf64-480.jpg 480w, assets/gallery/shadow-study-de96bf64-800.jpg 800w, assets/gallery/shadow-study-de96bf64-1200.jpg 1200w, assets/gallery/shadow-study-de96bf64-1600.jpg 1600w, assets/gallery/shadow-study-de96bf64-1920.jpg 1920w" sizes="min(100vw, calc(0.88 * clamp(220px, calc(200px + 9vw), 440px)))" width="1920" height="2400" alt="Hard midday light through a louvred facade." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">05</span> <span class="tile-title">Shadow Study No. 3</span></figcaption>
+            <figcaption class="tile-caption" id="caption-shadow-study"><span class="tile-no">05</span> <span class="tile-title">Shadow Study No. 3</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-night-lights" style="--ar:1.5;--tint:#28222d">
           <figure>
-            <a class="tile-link" href="assets/gallery/night-lights-7381fdde-2400.jpg">
+            <a class="tile-link" href="assets/gallery/night-lights-7381fdde-2400.jpg" aria-describedby="caption-night-lights">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/night-lights-7381fdde-480.avif 480w, assets/gallery/night-lights-7381fdde-800.avif 800w, assets/gallery/night-lights-7381fdde-1200.avif 1200w, assets/gallery/night-lights-7381fdde-1600.avif 1600w, assets/gallery/night-lights-7381fdde-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/night-lights-7381fdde-800.jpg" srcset="assets/gallery/night-lights-7381fdde-480.jpg 480w, assets/gallery/night-lights-7381fdde-800.jpg 800w, assets/gallery/night-lights-7381fdde-1200.jpg 1200w, assets/gallery/night-lights-7381fdde-1600.jpg 1600w, assets/gallery/night-lights-7381fdde-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="City lights rendered out of focus." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/night-lights-7381fdde-480.avif 480w, assets/gallery/night-lights-7381fdde-800.avif 800w, assets/gallery/night-lights-7381fdde-1200.avif 1200w, assets/gallery/night-lights-7381fdde-1600.avif 1600w, assets/gallery/night-lights-7381fdde-2400.avif 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/night-lights-7381fdde-800.jpg" srcset="assets/gallery/night-lights-7381fdde-480.jpg 480w, assets/gallery/night-lights-7381fdde-800.jpg 800w, assets/gallery/night-lights-7381fdde-1200.jpg 1200w, assets/gallery/night-lights-7381fdde-1600.jpg 1600w, assets/gallery/night-lights-7381fdde-2400.jpg 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1600" alt="City lights rendered out of focus." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">06</span> <span class="tile-title">After Hours</span></figcaption>
+            <figcaption class="tile-caption" id="caption-night-lights"><span class="tile-no">06</span> <span class="tile-title">After Hours</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-pines" style="--ar:0.6667;--tint:#626d6b">
           <figure>
-            <a class="tile-link" href="assets/gallery/pines-f485624f-1600.jpg">
+            <a class="tile-link" href="assets/gallery/pines-f485624f-1600.jpg" aria-describedby="caption-pines">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/pines-f485624f-480.avif 480w, assets/gallery/pines-f485624f-800.avif 800w, assets/gallery/pines-f485624f-1200.avif 1200w, assets/gallery/pines-f485624f-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/pines-f485624f-800.jpg" srcset="assets/gallery/pines-f485624f-480.jpg 480w, assets/gallery/pines-f485624f-800.jpg 800w, assets/gallery/pines-f485624f-1200.jpg 1200w, assets/gallery/pines-f485624f-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Layers of conifers dissolving into cloud." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/pines-f485624f-480.avif 480w, assets/gallery/pines-f485624f-800.avif 800w, assets/gallery/pines-f485624f-1200.avif 1200w, assets/gallery/pines-f485624f-1600.avif 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/pines-f485624f-800.jpg" srcset="assets/gallery/pines-f485624f-480.jpg 480w, assets/gallery/pines-f485624f-800.jpg 800w, assets/gallery/pines-f485624f-1200.jpg 1200w, assets/gallery/pines-f485624f-1600.jpg 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))" width="1600" height="2400" alt="Layers of conifers dissolving into cloud." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">07</span> <span class="tile-title">Pines in Cloud</span></figcaption>
+            <figcaption class="tile-caption" id="caption-pines"><span class="tile-no">07</span> <span class="tile-title">Pines in Cloud</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-sun-disc" style="--ar:1;--tint:#7e3e2e">
           <figure>
-            <a class="tile-link" href="assets/gallery/sun-disc-aaa4b927-2400.jpg">
+            <a class="tile-link" href="assets/gallery/sun-disc-aaa4b927-2400.jpg" aria-describedby="caption-sun-disc">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/sun-disc-aaa4b927-480.avif 480w, assets/gallery/sun-disc-aaa4b927-800.avif 800w, assets/gallery/sun-disc-aaa4b927-1200.avif 1200w, assets/gallery/sun-disc-aaa4b927-1600.avif 1600w, assets/gallery/sun-disc-aaa4b927-2400.avif 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/sun-disc-aaa4b927-800.jpg" srcset="assets/gallery/sun-disc-aaa4b927-480.jpg 480w, assets/gallery/sun-disc-aaa4b927-800.jpg 800w, assets/gallery/sun-disc-aaa4b927-1200.jpg 1200w, assets/gallery/sun-disc-aaa4b927-1600.jpg 1600w, assets/gallery/sun-disc-aaa4b927-2400.jpg 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))" width="2400" height="2400" alt="The sun touching the Atlantic." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/sun-disc-aaa4b927-480.avif 480w, assets/gallery/sun-disc-aaa4b927-800.avif 800w, assets/gallery/sun-disc-aaa4b927-1200.avif 1200w, assets/gallery/sun-disc-aaa4b927-1600.avif 1600w, assets/gallery/sun-disc-aaa4b927-2400.avif 2400w" sizes="min(100vw, calc(1.1 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/sun-disc-aaa4b927-800.jpg" srcset="assets/gallery/sun-disc-aaa4b927-480.jpg 480w, assets/gallery/sun-disc-aaa4b927-800.jpg 800w, assets/gallery/sun-disc-aaa4b927-1200.jpg 1200w, assets/gallery/sun-disc-aaa4b927-1600.jpg 1600w, assets/gallery/sun-disc-aaa4b927-2400.jpg 2400w" sizes="min(100vw, calc(1.1 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="2400" alt="The sun touching the Atlantic." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">08</span> <span class="tile-title">Sun Disc</span></figcaption>
+            <figcaption class="tile-caption" id="caption-sun-disc"><span class="tile-no">08</span> <span class="tile-title">Sun Disc</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-panorama" style="--ar:3;--tint:#263354">
           <figure>
-            <a class="tile-link" href="assets/gallery/panorama-d12d5ece-2400.jpg">
+            <a class="tile-link" href="assets/gallery/panorama-d12d5ece-2400.jpg" aria-describedby="caption-panorama">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/panorama-d12d5ece-480.avif 480w, assets/gallery/panorama-d12d5ece-800.avif 800w, assets/gallery/panorama-d12d5ece-1200.avif 1200w, assets/gallery/panorama-d12d5ece-1600.avif 1600w, assets/gallery/panorama-d12d5ece-2400.avif 2400w" sizes="min(100vw, calc(3.45 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/panorama-d12d5ece-800.jpg" srcset="assets/gallery/panorama-d12d5ece-480.jpg 480w, assets/gallery/panorama-d12d5ece-800.jpg 800w, assets/gallery/panorama-d12d5ece-1200.jpg 1200w, assets/gallery/panorama-d12d5ece-1600.jpg 1600w, assets/gallery/panorama-d12d5ece-2400.jpg 2400w" sizes="min(100vw, calc(3.45 * clamp(170px, 20vw, 360px)))" width="2400" height="800" alt="Stitched panorama, five frames." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/panorama-d12d5ece-480.avif 480w, assets/gallery/panorama-d12d5ece-800.avif 800w, assets/gallery/panorama-d12d5ece-1200.avif 1200w, assets/gallery/panorama-d12d5ece-1600.avif 1600w, assets/gallery/panorama-d12d5ece-2400.avif 2400w" sizes="min(100vw, calc(3.3 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/panorama-d12d5ece-800.jpg" srcset="assets/gallery/panorama-d12d5ece-480.jpg 480w, assets/gallery/panorama-d12d5ece-800.jpg 800w, assets/gallery/panorama-d12d5ece-1200.jpg 1200w, assets/gallery/panorama-d12d5ece-1600.jpg 1600w, assets/gallery/panorama-d12d5ece-2400.jpg 2400w" sizes="min(100vw, calc(3.3 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="800" alt="Stitched panorama, five frames." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">09</span> <span class="tile-title">Blue Hour Range</span></figcaption>
+            <figcaption class="tile-caption" id="caption-panorama"><span class="tile-no">09</span> <span class="tile-title">Blue Hour Range</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-window-light" style="--ar:0.8;--tint:#493d30">
           <figure>
-            <a class="tile-link" href="assets/gallery/window-light-20a1eefe-1920.jpg">
+            <a class="tile-link" href="assets/gallery/window-light-20a1eefe-1920.jpg" aria-describedby="caption-window-light">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/window-light-20a1eefe-480.avif 480w, assets/gallery/window-light-20a1eefe-800.avif 800w, assets/gallery/window-light-20a1eefe-1200.avif 1200w, assets/gallery/window-light-20a1eefe-1600.avif 1600w, assets/gallery/window-light-20a1eefe-1920.avif 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/window-light-20a1eefe-800.jpg" srcset="assets/gallery/window-light-20a1eefe-480.jpg 480w, assets/gallery/window-light-20a1eefe-800.jpg 800w, assets/gallery/window-light-20a1eefe-1200.jpg 1200w, assets/gallery/window-light-20a1eefe-1600.jpg 1600w, assets/gallery/window-light-20a1eefe-1920.jpg 1920w" sizes="min(100vw, calc(0.92 * clamp(170px, 20vw, 360px)))" width="1920" height="2400" alt="Winter afternoon light on a plaster wall." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/window-light-20a1eefe-480.avif 480w, assets/gallery/window-light-20a1eefe-800.avif 800w, assets/gallery/window-light-20a1eefe-1200.avif 1200w, assets/gallery/window-light-20a1eefe-1600.avif 1600w, assets/gallery/window-light-20a1eefe-1920.avif 1920w" sizes="min(100vw, calc(0.88 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/window-light-20a1eefe-800.jpg" srcset="assets/gallery/window-light-20a1eefe-480.jpg 480w, assets/gallery/window-light-20a1eefe-800.jpg 800w, assets/gallery/window-light-20a1eefe-1200.jpg 1200w, assets/gallery/window-light-20a1eefe-1600.jpg 1600w, assets/gallery/window-light-20a1eefe-1920.jpg 1920w" sizes="min(100vw, calc(0.88 * clamp(220px, calc(200px + 9vw), 440px)))" width="1920" height="2400" alt="Winter afternoon light on a plaster wall." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">10</span> <span class="tile-title">Window, 15:14</span></figcaption>
+            <figcaption class="tile-caption" id="caption-window-light"><span class="tile-no">10</span> <span class="tile-title">Window, 15:14</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-snowfield" style="--ar:1.5;--tint:#dee3e7">
           <figure>
-            <a class="tile-link" href="assets/gallery/snowfield-f9451435-2400.jpg">
+            <a class="tile-link" href="assets/gallery/snowfield-f9451435-2400.jpg" aria-describedby="caption-snowfield">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/snowfield-f9451435-480.avif 480w, assets/gallery/snowfield-f9451435-800.avif 800w, assets/gallery/snowfield-f9451435-1200.avif 1200w, assets/gallery/snowfield-f9451435-1600.avif 1600w, assets/gallery/snowfield-f9451435-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/snowfield-f9451435-800.jpg" srcset="assets/gallery/snowfield-f9451435-480.jpg 480w, assets/gallery/snowfield-f9451435-800.jpg 800w, assets/gallery/snowfield-f9451435-1200.jpg 1200w, assets/gallery/snowfield-f9451435-1600.jpg 1600w, assets/gallery/snowfield-f9451435-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="A row of spruce on an open snowfield." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/snowfield-f9451435-480.avif 480w, assets/gallery/snowfield-f9451435-800.avif 800w, assets/gallery/snowfield-f9451435-1200.avif 1200w, assets/gallery/snowfield-f9451435-1600.avif 1600w, assets/gallery/snowfield-f9451435-2400.avif 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/snowfield-f9451435-800.jpg" srcset="assets/gallery/snowfield-f9451435-480.jpg 480w, assets/gallery/snowfield-f9451435-800.jpg 800w, assets/gallery/snowfield-f9451435-1200.jpg 1200w, assets/gallery/snowfield-f9451435-1600.jpg 1600w, assets/gallery/snowfield-f9451435-2400.jpg 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1600" alt="A row of spruce on an open snowfield." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">11</span> <span class="tile-title">Treeline</span></figcaption>
+            <figcaption class="tile-caption" id="caption-snowfield"><span class="tile-no">11</span> <span class="tile-title">Treeline</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-tide" style="--ar:0.6667;--tint:#6b716b">
           <figure>
-            <a class="tile-link" href="assets/gallery/tide-d84123e2-1600.jpg">
+            <a class="tile-link" href="assets/gallery/tide-d84123e2-1600.jpg" aria-describedby="caption-tide">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/tide-d84123e2-480.avif 480w, assets/gallery/tide-d84123e2-800.avif 800w, assets/gallery/tide-d84123e2-1200.avif 1200w, assets/gallery/tide-d84123e2-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/tide-d84123e2-800.jpg" srcset="assets/gallery/tide-d84123e2-480.jpg 480w, assets/gallery/tide-d84123e2-800.jpg 800w, assets/gallery/tide-d84123e2-1200.jpg 1200w, assets/gallery/tide-d84123e2-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Shot from a headland, looking straight down." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/tide-d84123e2-480.avif 480w, assets/gallery/tide-d84123e2-800.avif 800w, assets/gallery/tide-d84123e2-1200.avif 1200w, assets/gallery/tide-d84123e2-1600.avif 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/tide-d84123e2-800.jpg" srcset="assets/gallery/tide-d84123e2-480.jpg 480w, assets/gallery/tide-d84123e2-800.jpg 800w, assets/gallery/tide-d84123e2-1200.jpg 1200w, assets/gallery/tide-d84123e2-1600.jpg 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))" width="1600" height="2400" alt="Shot from a headland, looking straight down." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">12</span> <span class="tile-title">Tide Edge</span></figcaption>
+            <figcaption class="tile-caption" id="caption-tide"><span class="tile-no">12</span> <span class="tile-title">Tide Edge</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-concrete" style="--ar:1;--tint:#959595">
           <figure>
-            <a class="tile-link" href="assets/gallery/concrete-14d3d93b-2400.jpg">
+            <a class="tile-link" href="assets/gallery/concrete-14d3d93b-2400.jpg" aria-describedby="caption-concrete">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/concrete-14d3d93b-480.avif 480w, assets/gallery/concrete-14d3d93b-800.avif 800w, assets/gallery/concrete-14d3d93b-1200.avif 1200w, assets/gallery/concrete-14d3d93b-1600.avif 1600w, assets/gallery/concrete-14d3d93b-2400.avif 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/concrete-14d3d93b-800.jpg" srcset="assets/gallery/concrete-14d3d93b-480.jpg 480w, assets/gallery/concrete-14d3d93b-800.jpg 800w, assets/gallery/concrete-14d3d93b-1200.jpg 1200w, assets/gallery/concrete-14d3d93b-1600.jpg 1600w, assets/gallery/concrete-14d3d93b-2400.jpg 2400w" sizes="min(100vw, calc(1.15 * clamp(170px, 20vw, 360px)))" width="2400" height="2400" alt="Brutalist geometry under an overcast sky." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/concrete-14d3d93b-480.avif 480w, assets/gallery/concrete-14d3d93b-800.avif 800w, assets/gallery/concrete-14d3d93b-1200.avif 1200w, assets/gallery/concrete-14d3d93b-1600.avif 1600w, assets/gallery/concrete-14d3d93b-2400.avif 2400w" sizes="min(100vw, calc(1.1 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/concrete-14d3d93b-800.jpg" srcset="assets/gallery/concrete-14d3d93b-480.jpg 480w, assets/gallery/concrete-14d3d93b-800.jpg 800w, assets/gallery/concrete-14d3d93b-1200.jpg 1200w, assets/gallery/concrete-14d3d93b-1600.jpg 1600w, assets/gallery/concrete-14d3d93b-2400.jpg 2400w" sizes="min(100vw, calc(1.1 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="2400" alt="Brutalist geometry under an overcast sky." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">13</span> <span class="tile-title">Planes</span></figcaption>
+            <figcaption class="tile-caption" id="caption-concrete"><span class="tile-no">13</span> <span class="tile-title">Planes</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-aurora" style="--ar:1.7778;--tint:#0c2023">
           <figure>
-            <a class="tile-link" href="assets/gallery/aurora-421c9a96-2400.jpg">
+            <a class="tile-link" href="assets/gallery/aurora-421c9a96-2400.jpg" aria-describedby="caption-aurora">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/aurora-421c9a96-480.avif 480w, assets/gallery/aurora-421c9a96-800.avif 800w, assets/gallery/aurora-421c9a96-1200.avif 1200w, assets/gallery/aurora-421c9a96-1600.avif 1600w, assets/gallery/aurora-421c9a96-2400.avif 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/aurora-421c9a96-800.jpg" srcset="assets/gallery/aurora-421c9a96-480.jpg 480w, assets/gallery/aurora-421c9a96-800.jpg 800w, assets/gallery/aurora-421c9a96-1200.jpg 1200w, assets/gallery/aurora-421c9a96-1600.jpg 1600w, assets/gallery/aurora-421c9a96-2400.jpg 2400w" sizes="min(100vw, calc(2.044 * clamp(170px, 20vw, 360px)))" width="2400" height="1350" alt="Aurora over the fjord ridge." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/aurora-421c9a96-480.avif 480w, assets/gallery/aurora-421c9a96-800.avif 800w, assets/gallery/aurora-421c9a96-1200.avif 1200w, assets/gallery/aurora-421c9a96-1600.avif 1600w, assets/gallery/aurora-421c9a96-2400.avif 2400w" sizes="min(100vw, calc(1.956 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/aurora-421c9a96-800.jpg" srcset="assets/gallery/aurora-421c9a96-480.jpg 480w, assets/gallery/aurora-421c9a96-800.jpg 800w, assets/gallery/aurora-421c9a96-1200.jpg 1200w, assets/gallery/aurora-421c9a96-1600.jpg 1600w, assets/gallery/aurora-421c9a96-2400.jpg 2400w" sizes="min(100vw, calc(1.956 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1350" alt="Aurora over the fjord ridge." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">14</span> <span class="tile-title">Corona</span></figcaption>
+            <figcaption class="tile-caption" id="caption-aurora"><span class="tile-no">14</span> <span class="tile-title">Corona</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-canyon" style="--ar:0.6667;--tint:#61311c">
           <figure>
-            <a class="tile-link" href="assets/gallery/canyon-7c0ed413-1600.jpg">
+            <a class="tile-link" href="assets/gallery/canyon-7c0ed413-1600.jpg" aria-describedby="caption-canyon">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/canyon-7c0ed413-480.avif 480w, assets/gallery/canyon-7c0ed413-800.avif 800w, assets/gallery/canyon-7c0ed413-1200.avif 1200w, assets/gallery/canyon-7c0ed413-1600.avif 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/canyon-7c0ed413-800.jpg" srcset="assets/gallery/canyon-7c0ed413-480.jpg 480w, assets/gallery/canyon-7c0ed413-800.jpg 800w, assets/gallery/canyon-7c0ed413-1200.jpg 1200w, assets/gallery/canyon-7c0ed413-1600.jpg 1600w" sizes="min(100vw, calc(0.767 * clamp(170px, 20vw, 360px)))" width="1600" height="2400" alt="Reflected light inside a slot canyon." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/canyon-7c0ed413-480.avif 480w, assets/gallery/canyon-7c0ed413-800.avif 800w, assets/gallery/canyon-7c0ed413-1200.avif 1200w, assets/gallery/canyon-7c0ed413-1600.avif 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/canyon-7c0ed413-800.jpg" srcset="assets/gallery/canyon-7c0ed413-480.jpg 480w, assets/gallery/canyon-7c0ed413-800.jpg 800w, assets/gallery/canyon-7c0ed413-1200.jpg 1200w, assets/gallery/canyon-7c0ed413-1600.jpg 1600w" sizes="min(100vw, calc(0.733 * clamp(220px, calc(200px + 9vw), 440px)))" width="1600" height="2400" alt="Reflected light inside a slot canyon." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">15</span> <span class="tile-title">Slot</span></figcaption>
+            <figcaption class="tile-caption" id="caption-canyon"><span class="tile-no">15</span> <span class="tile-title">Slot</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-lake" style="--ar:1.5;--tint:#a09fb5">
           <figure>
-            <a class="tile-link" href="assets/gallery/lake-ff0898c9-2400.jpg">
+            <a class="tile-link" href="assets/gallery/lake-ff0898c9-2400.jpg" aria-describedby="caption-lake">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/lake-ff0898c9-480.avif 480w, assets/gallery/lake-ff0898c9-800.avif 800w, assets/gallery/lake-ff0898c9-1200.avif 1200w, assets/gallery/lake-ff0898c9-1600.avif 1600w, assets/gallery/lake-ff0898c9-2400.avif 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/lake-ff0898c9-800.jpg" srcset="assets/gallery/lake-ff0898c9-480.jpg 480w, assets/gallery/lake-ff0898c9-800.jpg 800w, assets/gallery/lake-ff0898c9-1200.jpg 1200w, assets/gallery/lake-ff0898c9-1600.jpg 1600w, assets/gallery/lake-ff0898c9-2400.jpg 2400w" sizes="min(100vw, calc(1.725 * clamp(170px, 20vw, 360px)))" width="2400" height="1600" alt="A windless dawn doubles the range." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/lake-ff0898c9-480.avif 480w, assets/gallery/lake-ff0898c9-800.avif 800w, assets/gallery/lake-ff0898c9-1200.avif 1200w, assets/gallery/lake-ff0898c9-1600.avif 1600w, assets/gallery/lake-ff0898c9-2400.avif 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/lake-ff0898c9-800.jpg" srcset="assets/gallery/lake-ff0898c9-480.jpg 480w, assets/gallery/lake-ff0898c9-800.jpg 800w, assets/gallery/lake-ff0898c9-1200.jpg 1200w, assets/gallery/lake-ff0898c9-1600.jpg 1600w, assets/gallery/lake-ff0898c9-2400.jpg 2400w" sizes="min(100vw, calc(1.65 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1600" alt="A windless dawn doubles the range." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">16</span> <span class="tile-title">Still Water</span></figcaption>
+            <figcaption class="tile-caption" id="caption-lake"><span class="tile-no">16</span> <span class="tile-title">Still Water</span></figcaption>
           </figure>
         </li>
         <li class="tile" id="photo-salt-flat" style="--ar:2.3346;--tint:#cacfd2">
           <figure>
-            <a class="tile-link" href="assets/gallery/salt-flat-5b0b173e-2400.jpg">
+            <a class="tile-link" href="assets/gallery/salt-flat-5b0b173e-2400.jpg" aria-describedby="caption-salt-flat">
               <picture>
-                <source type="image/avif" srcset="assets/gallery/salt-flat-5b0b173e-480.avif 480w, assets/gallery/salt-flat-5b0b173e-800.avif 800w, assets/gallery/salt-flat-5b0b173e-1200.avif 1200w, assets/gallery/salt-flat-5b0b173e-1600.avif 1600w, assets/gallery/salt-flat-5b0b173e-2400.avif 2400w" sizes="min(100vw, calc(2.685 * clamp(170px, 20vw, 360px)))">
-                <img src="assets/gallery/salt-flat-5b0b173e-800.jpg" srcset="assets/gallery/salt-flat-5b0b173e-480.jpg 480w, assets/gallery/salt-flat-5b0b173e-800.jpg 800w, assets/gallery/salt-flat-5b0b173e-1200.jpg 1200w, assets/gallery/salt-flat-5b0b173e-1600.jpg 1600w, assets/gallery/salt-flat-5b0b173e-2400.jpg 2400w" sizes="min(100vw, calc(2.685 * clamp(170px, 20vw, 360px)))" width="2400" height="1028" alt="A single figure on the salt crust." loading="lazy" decoding="async">
+                <source type="image/avif" srcset="assets/gallery/salt-flat-5b0b173e-480.avif 480w, assets/gallery/salt-flat-5b0b173e-800.avif 800w, assets/gallery/salt-flat-5b0b173e-1200.avif 1200w, assets/gallery/salt-flat-5b0b173e-1600.avif 1600w, assets/gallery/salt-flat-5b0b173e-2400.avif 2400w" sizes="min(100vw, calc(2.568 * clamp(220px, calc(200px + 9vw), 440px)))">
+                <img src="assets/gallery/salt-flat-5b0b173e-800.jpg" srcset="assets/gallery/salt-flat-5b0b173e-480.jpg 480w, assets/gallery/salt-flat-5b0b173e-800.jpg 800w, assets/gallery/salt-flat-5b0b173e-1200.jpg 1200w, assets/gallery/salt-flat-5b0b173e-1600.jpg 1600w, assets/gallery/salt-flat-5b0b173e-2400.jpg 2400w" sizes="min(100vw, calc(2.568 * clamp(220px, calc(200px + 9vw), 440px)))" width="2400" height="1028" alt="A single figure on the salt crust." loading="lazy" decoding="async">
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">17</span> <span class="tile-title">Figure, Salt Flat</span></figcaption>
+            <figcaption class="tile-caption" id="caption-salt-flat"><span class="tile-no">17</span> <span class="tile-title">Figure, Salt Flat</span></figcaption>
           </figure>
         </li>
       </ol>
       <script type="application/json" id="gallery-data">[{"id":"ridgelines","title":"Ridgelines","caption":"Five ridges stacked into the last light.","location":"Dolomites, Italy","date":"2024-10-12","width":2400,"height":1600,"tint":"#5b4c5f","exif":{"camera":"Fujifilm X-T5","lens":"XF70-300mmF4-5.6 R LM OIS WR","focal":"210mm","focal35":"315mm","aperture":"f/8","shutter":"1/320s","iso":"ISO 160"}},{"id":"fog-ridge","title":"Fog Line","caption":"Morning fog settling between ridges.","location":"Black Forest, Germany","date":"2023-11-03","width":1600,"height":2400,"tint":"#868683","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/5.6","shutter":"1/250s","iso":"ISO 100"}},{"id":"horizon","title":"Horizon, 05:58","caption":"Flat sea at first light.","location":"Lofoten, Norway","date":"2024-06-21","width":2400,"height":1350,"tint":"#76899b","exif":{"camera":"Sony A7R V","lens":"FE 24-70mm F2.8 GM II","focal":"52mm","aperture":"f/11","shutter":"1/125s","iso":"ISO 100"}},{"id":"dunes","title":"Erg","caption":"Dunes in low raking light.","location":"Merzouga, Morocco","date":"2024-03-02","width":2400,"height":1600,"tint":"#977963","exif":{"camera":"Canon EOS R5","lens":"RF100-500mm F4.5-7.1 L IS USM","focal":"340mm","aperture":"f/9","shutter":"1/500s","iso":"ISO 200"}},{"id":"shadow-study","title":"Shadow Study No. 3","caption":"Hard midday light through a louvred facade.","location":"Lisbon, Portugal","date":"2023-08-15","width":1920,"height":2400,"tint":"#727272","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/8","shutter":"1/1000s","iso":"ISO 200"}},{"id":"night-lights","title":"After Hours","caption":"City lights rendered out of focus.","location":"Tokyo, Japan","date":"2024-12-19","width":2400,"height":1600,"tint":"#28222d","exif":{"camera":"Fujifilm X-T5","lens":"XF56mmF1.2 R WR","focal":"56mm","focal35":"84mm","aperture":"f/1.2","shutter":"1/60s","iso":"ISO 3200"}},{"id":"pines","title":"Pines in Cloud","caption":"Layers of conifers dissolving into cloud.","location":"Hokkaido, Japan","date":"2023-10-28","width":1600,"height":2400,"tint":"#626d6b","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 70-200mm f/2.8 VR S","focal":"135mm","aperture":"f/5.6","shutter":"1/200s","iso":"ISO 400"}},{"id":"sun-disc","title":"Sun Disc","caption":"The sun touching the Atlantic.","location":"Algarve, Portugal","date":"2024-08-09","width":2400,"height":2400,"tint":"#7e3e2e","exif":{"camera":"Canon EOS R5","lens":"RF800mm F11 IS STM","focal":"800mm","aperture":"f/11","shutter":"1/2000s","iso":"ISO 100"}},{"id":"panorama","title":"Blue Hour Range","caption":"Stitched panorama, five frames.","location":"Patagonia, Chile","date":"2024-01-17","width":2400,"height":800,"tint":"#263354","exif":{"camera":"Sony A7R V","lens":"FE 70-200mm F2.8 GM OSS II","focal":"105mm","aperture":"f/8","shutter":"2s","iso":"ISO 100"}},{"id":"window-light","title":"Window, 15:14","caption":"Winter afternoon light on a plaster wall.","location":"Copenhagen, Denmark","date":"2023-12-02","width":1920,"height":2400,"tint":"#493d30","exif":{"camera":"Fujifilm X-T5","lens":"XF23mmF1.4 R LM WR","focal":"23mm","focal35":"35mm","aperture":"f/2.8","shutter":"1/60s","iso":"ISO 800"}},{"id":"snowfield","title":"Treeline","caption":"A row of spruce on an open snowfield.","location":"Lapland, Finland","date":"2024-02-11","width":2400,"height":1600,"tint":"#dee3e7","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 24-120mm f/4 S","focal":"120mm","aperture":"f/8","shutter":"1/800s","iso":"ISO 64"}},{"id":"tide","title":"Tide Edge","caption":"Shot from a headland, looking straight down.","location":"Isle of Harris, Scotland","date":"2023-09-22","width":1600,"height":2400,"tint":"#6b716b","exif":{"camera":"Canon EOS R5","lens":"RF24-105mm F4 L IS USM","focal":"24mm","aperture":"f/11","shutter":"1/2s","iso":"ISO 50"}},{"id":"concrete","title":"Planes","caption":"Brutalist geometry under an overcast sky.","location":"Chandigarh, India","date":"2024-04-06","width":2400,"height":2400,"tint":"#959595","exif":{"camera":"Leica Q3","lens":"SUMMILUX 1:1.7/28 ASPH.","focal":"28mm","aperture":"f/4","shutter":"1/500s","iso":"ISO 100"}},{"id":"aurora","title":"Corona","caption":"Aurora over the fjord ridge.","location":"Tromsø, Norway","date":"2024-03-24","width":2400,"height":1350,"tint":"#0c2023","exif":{"camera":"Sony A7R V","lens":"FE 14mm F1.8 GM","focal":"14mm","aperture":"f/1.8","shutter":"8s","iso":"ISO 1600"}},{"id":"canyon","title":"Slot","caption":"Reflected light inside a slot canyon.","location":"Page, Arizona, USA","date":"2023-05-30","width":1600,"height":2400,"tint":"#61311c","exif":{"camera":"Fujifilm X-T5","lens":"XF16mmF1.4 R WR","focal":"16mm","focal35":"24mm","aperture":"f/8","shutter":"1/30s","iso":"ISO 400"}},{"id":"lake","title":"Still Water","caption":"A windless dawn doubles the range.","location":"Lake Bled, Slovenia","date":"2024-09-14","width":2400,"height":1600,"tint":"#a09fb5","exif":{"camera":"Nikon Z 8","lens":"NIKKOR Z 24-120mm f/4 S","focal":"58mm","aperture":"f/9","shutter":"1/60s","iso":"ISO 100"}},{"id":"salt-flat","title":"Figure, Salt Flat","caption":"A single figure on the salt crust.","location":"Salar de Uyuni, Bolivia","date":"2024-07-04","width":2400,"height":1028,"tint":"#cacfd2","exif":{"camera":"Sony A7R V","lens":"FE 24-70mm F2.8 GM II","focal":"70mm","aperture":"f/8","shutter":"1/1600s","iso":"ISO 100"}}]</script>
+      <script>/* assets/js/layout.js (inlined by the build) */
+/* ==========================================================================
+   Portfolio: gallery row layout.
+
+   The build (tools/build.mjs) inlines this file directly after the gallery
+   markup, so rows get their final size before the first paint and before any
+   lazy image chooses which file to download. Run `npm run build` after
+   editing it. main.js reuses it (window.PhotoLayout) on resize and for the
+   S/M/L control.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  // Target row height for a gallery `width` px wide (before the size factor):
+  // 220px on phones up to 440px on very large screens.
+  // Keep in sync with rowHeightCss() in tools/build.mjs and --row-h in style.css.
+  function baseRowHeight(width) {
+    return Math.max(220, Math.min(440, 200 + 0.09 * width));
+  }
+
+  // S / M / L. Phones get a denser S so it really shows three across.
+  function sizeFactor(size, width) {
+    if (size === 's') return width < 600 ? 0.45 : 0.6;
+    if (size === 'l') return 1.75;
+    return 1;
+  }
+
+  var MAX_PER_ROW = 12;
+
+  /**
+   * Split photos (aspect ratios) into rows whose heights stay close to the
+   * target: dynamic programming over all break points, like line breaking in
+   * typesetting. Nothing is ever cropped; every row fills the width exactly,
+   * except a last row that would have to be stretched too tall.
+   */
+  function partition(ratios, width, gap, target, minTile) {
+    var n = ratios.length;
+    var cost = [0];
+    var from = [0];
+
+    for (var end = 1; end <= n; end++) {
+      cost[end] = Infinity;
+      var sum = 0;
+      var minRatio = Infinity;
+      for (var start = end - 1; start >= 0 && end - start <= MAX_PER_ROW; start--) {
+        sum += ratios[start];
+        minRatio = Math.min(minRatio, ratios[start]);
+        var count = end - start;
+        var h = (width - gap * (count - 1)) / sum;
+        if (h < target * 0.4 && count > 1) break; // more photos only make it shorter
+        var c = 0;
+        if (end !== n || h <= target * 1.3) {
+          var d = Math.log(h / target); // half the target is as bad as double
+          c = d * d * (h > target ? 1.5 : 1);
+          if (h > target * 1.3) c += 4 * Math.pow(Math.log(h / (target * 1.3)), 2);
+          if (h < target * 0.8) c += 4 * Math.pow(Math.log(h / (target * 0.8)), 2);
+          if (count > 1 && h * minRatio < minTile) c += 10; // no slivers
+        }
+        if (cost[start] + c < cost[end]) {
+          cost[end] = cost[start] + c;
+          from[end] = start;
+        }
+      }
+    }
+
+    var rows = [];
+    for (var e = n; e > 0; e = from[e]) {
+      var s = from[e];
+      var total = 0;
+      for (var i = s; i < e; i++) total += ratios[i];
+      var height = (width - gap * (e - s - 1)) / total;
+      var justified = !(e === n && height > target * 1.3);
+      rows.unshift({ start: s, end: e, height: justified ? height : target, justified: justified });
+    }
+    return rows;
+  }
+
+  /** Width descriptor of the file an <img> is showing ("…-1200.avif" → 1200). */
+  function candidateWidth(img) {
+    var match = /-(\d+)\.(?:avif|webp|jpe?g|png)(?:[?#]|$)/i.exec(img.currentSrc || '');
+    return match ? Number(match[1]) : 0;
+  }
+
+  function setSizes(picture, width) {
+    var value = Math.ceil(width) + 'px';
+    var nodes = picture.querySelectorAll('source, img');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].getAttribute('sizes') !== value) nodes[i].setAttribute('sizes', value);
+    }
+  }
+
+  /**
+   * Keep each thumbnail sharp without ever downloading it twice. A lazy image
+   * that hasn't picked a file yet (off screen: no currentSrc) gets its exact
+   * width. Everything else keeps the estimate it started with: eager images
+   * may already have been fetched by the browser's preload scanner, and
+   * changing `sizes` mid-download makes browsers fetch the image again. Once
+   * loaded, an image is upgraded only if it is genuinely too small (e.g.
+   * after switching to L).
+   */
+  var pendingWidth = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+  function updateSizes(picture, width) {
+    var img = picture && picture.querySelector('img');
+    if (!img) return;
+    if (!img.currentSrc && img.loading === 'lazy') return setSizes(picture, width);
+    if (!(img.complete && img.naturalWidth)) {
+      if (!pendingWidth) return;
+      if (!pendingWidth.has(img)) {
+        img.addEventListener('load', function () {
+          var w = pendingWidth.get(img);
+          pendingWidth['delete'](img);
+          updateSizes(picture, w);
+        }, { once: true });
+      }
+      pendingWidth.set(img, width);
+      return;
+    }
+    var have = candidateWidth(img);
+    if (have && have >= width * (window.devicePixelRatio || 1) * 0.98) return;
+    setSizes(picture, width);
+  }
+
+  /** Lay out the gallery at size 's' | 'm' | 'l'. Returns the width used. */
+  function layout(gallery, size) {
+    // Exact (fractional) width minus 1px of slack for sub-pixel rounding;
+    // the last tile of each justified row grows to absorb it.
+    var width = gallery.getBoundingClientRect().width - 1;
+    if (width <= 0) return 0;
+    var tiles = gallery.querySelectorAll('.tile');
+    var ratios = [];
+    for (var i = 0; i < tiles.length; i++) {
+      ratios.push(parseFloat(tiles[i].style.getPropertyValue('--ar')) || 1.5);
+    }
+    var gap = parseFloat(getComputedStyle(gallery).columnGap) || 0;
+    var target = baseRowHeight(width) * sizeFactor(size, width);
+    var rows = partition(ratios, width, gap, target, width < 600 ? 64 : 80);
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      for (var k = row.start; k < row.end; k++) {
+        var tile = tiles[k];
+        // Floor to 1/100 px so a row can never overflow and wrap early.
+        var w = Math.floor(ratios[k] * row.height * 100) / 100;
+        tile.style.setProperty('--w', w + 'px');
+        tile.style.setProperty('--h', Math.round(row.height * 100) / 100 + 'px');
+        tile.classList.toggle('is-row-end', row.justified && k === row.end - 1);
+        updateSizes(tile.querySelector('picture'), w);
+      }
+    }
+    gallery.classList.add('is-justified');
+    return width;
+  }
+
+  /** Fade thumbnails in as they arrive (only those not already decoded). */
+  function fadeIn(gallery) {
+    var imgs = gallery.querySelectorAll('.tile img');
+    for (var i = 0; i < imgs.length; i++) {
+      (function (img) {
+        if (img.complete && img.naturalWidth) return;
+        img.classList.add('is-loading');
+        var done = function () { img.classList.remove('is-loading'); };
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      })(imgs[i]);
+    }
+  }
+
+  window.PhotoLayout = { layout: layout, partition: partition };
+
+  var gallery = document.getElementById('gallery');
+  if (gallery) {
+    fadeIn(gallery);
+    layout(gallery, document.documentElement.getAttribute('data-size') || 'm');
+  }
+})();
+      </script>
       <!-- /build:gallery -->
       </section>
 
       <section class="about" id="about" aria-labelledby="about-title">
-        <h2 class="section-title" id="about-title"><span class="section-no">02</span> About</h2>
-        <div class="about-body">
-          <!-- EDIT: a few sentences about you and your work. -->
+        <h2 class="section-title" id="about-title"><span class="section-no" aria-hidden="true">02</span> About</h2>
+        <div class="about-body"><!-- build:about -->
           <p class="lede">Your Name is a photographer working with landscape, light and the quiet geometry of built places.</p>
           <p>Replace this paragraph with a short biography: where you are based, what you photograph and why, and the kind of work you take on. Two or three sentences is plenty; the photographs do the talking.</p>
-          <!-- EDIT: facts shown as a list. Add, remove or rename rows freely. -->
           <dl class="facts">
             <div><dt>Based in</dt><dd>City, Country</dd></div>
             <div><dt>Available for</dt><dd>Commissions, editorial, fine-art prints</dd></div>
             <div><dt>Selected clients</dt><dd>Client One, Client Two, Client Three</dd></div>
           </dl>
-        </div>
+        <!-- /build:about --></div>
       </section>
 
       <section class="contact" id="contact" aria-labelledby="contact-title">
-        <h2 class="section-title" id="contact-title"><span class="section-no">03</span> Contact</h2>
-        <div class="contact-body">
-          <!-- EDIT: your email address (both the link and the text) and your profiles. -->
+        <h2 class="section-title" id="contact-title"><span class="section-no" aria-hidden="true">03</span> Contact</h2>
+        <div class="contact-body"><!-- build:contact -->
           <p class="contact-intro">For commissions, licensing and print enquiries:</p>
           <a class="contact-email" href="mailto:hello@example.com">hello@example.com</a>
           <ul class="contact-links">
             <li><a href="https://instagram.com/" rel="me noopener" target="_blank">Instagram<span class="visually-hidden"> (opens in a new tab)</span></a></li>
             <li><a href="https://www.linkedin.com/" rel="me noopener" target="_blank">LinkedIn<span class="visually-hidden"> (opens in a new tab)</span></a></li>
           </ul>
-        </div>
+        <!-- /build:contact --></div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>© <span data-year>2026</span> Your Name. All rights reserved.</p>
+      <p><!-- build:footer -->© <span data-year>2026</span> Your Name. All rights reserved.<!-- /build:footer --></p>
       <a href="#top" class="to-top">Back to top</a>
     </footer>
   </body>

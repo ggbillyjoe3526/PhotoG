@@ -41,6 +41,11 @@
     function systemTheme() { return system.matches ? 'dark' : 'light'; }
     function current() { return root.getAttribute('data-theme') || systemTheme(); }
 
+    function follow() {
+      root.removeAttribute('data-theme');
+      store.set('theme', null);
+    }
+
     function sync() {
       var theme = current();
       var explicit = root.hasAttribute('data-theme');
@@ -58,176 +63,76 @@
       button.addEventListener('click', function () {
         var next = current() === 'dark' ? 'light' : 'dark';
         // Choosing the system's own theme means "follow the system" again.
-        if (next === systemTheme()) {
-          root.removeAttribute('data-theme');
-          store.set('theme', null);
-        } else {
+        if (next === systemTheme()) follow();
+        else {
           root.setAttribute('data-theme', next);
           store.set('theme', next);
         }
         sync();
       });
+      button.classList.add('is-ready'); // shown only once it works
     }
 
-    if (system.addEventListener) system.addEventListener('change', sync);
-    else if (system.addListener) system.addListener(sync);
+    function onSystemChange() {
+      // If the system now matches the visitor's choice, go back to following it.
+      if (root.getAttribute('data-theme') === systemTheme()) follow();
+      sync();
+    }
+    if (system.addEventListener) system.addEventListener('change', onSystemChange);
+    else if (system.addListener) system.addListener(onSystemChange);
     sync();
   }
 
   /* -------------------------------------------------------------- gallery */
 
-  // Target row height = clamp(min, vw% of the width, max) x size factor.
-  // Keep in sync with ROW in tools/build.mjs and --row-h in style.css.
-  var ROW = { min: 170, vw: 20, max: 360 };
-  var SIZE_FACTORS = { s: 0.62, m: 1, l: 1.55 };
-  var MAX_PER_ROW = 9;
-
-  function baseRowHeight(width) {
-    return Math.max(ROW.min, Math.min(ROW.max, width * ROW.vw / 100));
-  }
-
-  /**
-   * Split items into rows whose heights are as close as possible to the
-   * target (dynamic programming over break points, like Knuth–Plass for
-   * text). Returns [{ start, end, height, justified }].
-   */
-  function partition(ratios, width, gap, target) {
-    var n = ratios.length;
-    var cost = new Array(n + 1);
-    var from = new Array(n + 1);
-    cost[0] = 0;
-
-    for (var end = 1; end <= n; end++) {
-      cost[end] = Infinity;
-      var sum = 0;
-      for (var start = end - 1; start >= 0 && end - start <= MAX_PER_ROW; start--) {
-        sum += ratios[start];
-        var count = end - start;
-        var h = (width - gap * (count - 1)) / sum;
-        if (h < target * 0.45 && count > 1) break; // only gets shorter
-        var c = 0; // the last row may stay short instead of being stretched
-        if (end !== n || h <= target) {
-          // Log-ratio cost: half the target is as bad as double. Rows taller
-          // than the target cost a little more, and much more past 1.3x.
-          var d = Math.log(h / target);
-          c = d * d * (h > target ? 1.5 : 1);
-          if (h > target * 1.3) {
-            var over = Math.log(h / (target * 1.3));
-            c += 4 * over * over;
-          }
-        }
-        if (cost[start] + c < cost[end]) {
-          cost[end] = cost[start] + c;
-          from[end] = start;
-        }
-      }
-    }
-
-    var rows = [];
-    for (var e = n; e > 0; e = from[e]) {
-      var s = from[e];
-      var total = 0;
-      for (var i = s; i < e; i++) total += ratios[i];
-      var height = (width - gap * (e - s - 1)) / total;
-      var justified = !(e === n && height > target);
-      rows.unshift({ start: s, end: e, height: justified ? height : target, justified: justified });
-    }
-    return rows;
-  }
-
-  /** Width descriptor of the file an <img> is showing (from "-960.avif"). */
-  function candidateWidth(img) {
-    var match = /-(\d+)\.(?:avif|webp|jpe?g|png)(?:[?#]|$)/i.exec(img.currentSrc || '');
-    return match ? Number(match[1]) : 0;
-  }
-
-  /**
-   * The HTML ships a close estimate of each thumbnail's width in `sizes`.
-   * Once a thumbnail has loaded, check it against the exact laid-out width
-   * and ask for a larger file only if it's too small (e.g. after switching to
-   * large thumbnails). Never earlier and never smaller: changing `sizes`
-   * while a download is in flight makes browsers fetch the image twice.
-   */
-  var pendingWidth = new WeakMap();
-
-  function updateSizes(picture, width) {
-    var img = picture && picture.querySelector('img');
-    if (!img) return;
-    if (!(img.complete && img.naturalWidth)) {
-      if (!pendingWidth.has(img)) {
-        img.addEventListener('load', function () {
-          var w = pendingWidth.get(img);
-          pendingWidth.delete(img);
-          updateSizes(picture, w);
-        }, { once: true });
-      }
-      pendingWidth.set(img, width);
-      return;
-    }
-    var have = candidateWidth(img);
-    if (have && have >= width * (window.devicePixelRatio || 1) * 0.98) return;
-    var sizes = Math.ceil(width) + 'px';
-    Array.prototype.forEach.call(picture.querySelectorAll('source, img'), function (node) {
-      if (node.getAttribute('sizes') !== sizes) node.setAttribute('sizes', sizes);
-    });
-  }
+  // Row layout lives in assets/js/layout.js, which the build inlines right
+  // after the gallery so rows are sized before the first paint. Here we only
+  // re-run it on resize and wire up the S/M/L control.
 
   function initGallery() {
     var gallery = document.getElementById('gallery');
     if (!gallery) return null;
-
     var tiles = Array.prototype.slice.call(gallery.querySelectorAll('.tile'));
-    var ratios = tiles.map(function (tile) {
-      return parseFloat(tile.style.getPropertyValue('--ar')) || 1.5;
-    });
+    var api = { gallery: gallery, tiles: tiles };
+    var engine = window.PhotoLayout;
+    if (!engine) return api; // CSS-only rows still work
+
     var size = root.getAttribute('data-size') || 'm';
-    var lastWidth = 0;
+    var lastWidth = gallery.getBoundingClientRect().width;
     var frame = 0;
 
-    // Fade images in as they arrive (only those not already decoded).
-    tiles.forEach(function (tile) {
-      var img = tile.querySelector('img');
-      if (!img || (img.complete && img.naturalWidth)) return;
-      img.classList.add('is-loading');
-      var done = function () { img.classList.remove('is-loading'); };
-      img.addEventListener('load', done, { once: true });
-      img.addEventListener('error', done, { once: true });
-    });
-
-    function layout(force) {
-      // Exact (fractional) width, minus 1px of slack for sub-pixel rounding;
-      // the last tile of each row grows to absorb it.
-      var width = gallery.getBoundingClientRect().width - 1;
-      if (width <= 0 || (!force && Math.abs(width - lastWidth) < 0.5)) return;
-      lastWidth = width;
-
-      var gap = parseFloat(getComputedStyle(gallery).columnGap) || 0;
-      var target = baseRowHeight(width) * (SIZE_FACTORS[size] || 1);
-      var rows = partition(ratios, width, gap, target);
-
-      rows.forEach(function (row) {
-        for (var i = row.start; i < row.end; i++) {
-          var tile = tiles[i];
-          // Floor to 1/100 px so a row can never overflow and wrap early;
-          // the last tile of a justified row absorbs the remainder.
-          var w = Math.floor(ratios[i] * row.height * 100) / 100;
-          tile.style.setProperty('--w', w + 'px');
-          tile.style.setProperty('--h', Math.round(row.height * 100) / 100 + 'px');
-          tile.classList.toggle('is-row-end', row.justified && i === row.end - 1);
-          updateSizes(tile.querySelector('picture'), w);
-        }
-      });
-      gallery.classList.add('is-justified');
+    function relayout() {
+      lastWidth = gallery.getBoundingClientRect().width;
+      engine.layout(gallery, size);
     }
 
-    function schedule() {
+    function onResize() {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(function () { layout(false); });
+      frame = requestAnimationFrame(function () {
+        if (Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5) relayout();
+      });
     }
+    if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(gallery);
+    else window.addEventListener('resize', onResize);
+    if (!gallery.classList.contains('is-justified')) relayout();
 
-    if ('ResizeObserver' in window) new ResizeObserver(schedule).observe(gallery);
-    else window.addEventListener('resize', schedule);
-    layout(true);
+    /** The photo nearest the centre of the screen (the one being looked at). */
+    function centreTile() {
+      var cx = window.innerWidth / 2;
+      var cy = window.innerHeight / 2;
+      var best = null;
+      var bestDist = Infinity;
+      for (var i = 0; i < tiles.length; i++) {
+        var r = tiles[i].getBoundingClientRect();
+        if (r.bottom < 0) continue;
+        if (r.top > window.innerHeight) break;
+        var dx = Math.max(r.left - cx, 0, cx - r.right);
+        var dy = Math.max(r.top - cy, 0, cy - r.bottom);
+        var dist = dx * dx + dy * dy;
+        if (dist < bestDist) { best = tiles[i]; bestDist = dist; }
+      }
+      return best;
+    }
 
     // Thumbnail size control (S / M / L).
     var control = document.querySelector('.size-control');
@@ -242,28 +147,27 @@
         button.addEventListener('click', function () {
           var next = button.getAttribute('data-size');
           if (next === size) return;
-          // Keep the photo nearest the top of the screen in place.
-          var anchor = null;
-          for (var i = 0; i < tiles.length; i++) {
-            if (tiles[i].getBoundingClientRect().bottom > 0) { anchor = tiles[i]; break; }
-          }
+          // Keep the photo in the middle of the screen where it is, unless
+          // the top of the gallery is in view (then the page stays put).
+          var anchor = gallery.getBoundingClientRect().top < 0 ? centreTile() : null;
           var before = anchor ? anchor.getBoundingClientRect().top : 0;
           size = next;
           if (size === 'm') root.removeAttribute('data-size');
           else root.setAttribute('data-size', size);
           store.set('gallery-size', size === 'm' ? null : size);
           syncButtons();
-          layout(true);
-          if (anchor && before < window.innerHeight && anchor.getBoundingClientRect().top !== before && window.scrollY > 0) {
-            window.scrollBy({ top: anchor.getBoundingClientRect().top - before, behavior: 'instant' });
+          relayout();
+          if (anchor) {
+            var delta = anchor.getBoundingClientRect().top - before;
+            if (delta) window.scrollBy({ top: delta, behavior: 'instant' });
           }
         });
       });
       syncButtons();
-      control.hidden = false;
+      control.classList.add('is-ready');
     }
 
-    return { gallery: gallery, tiles: tiles };
+    return api;
   }
 
   /* --------------------------------------------------------------- viewer */

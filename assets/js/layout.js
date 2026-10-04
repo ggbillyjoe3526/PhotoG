@@ -1,16 +1,11 @@
 /* ==========================================================================
    Portfolio: gallery row layout.
 
-   WORK IN PROGRESS: NOT USED YET. See handoff.md, "Next steps". The live
-   layout is still partition()/initGallery() in main.js.
-
-   Plan: the build (tools/build.mjs) inlines this file directly after the
-   gallery markup, so rows get their final size before the first paint and
-   before any lazy image starts downloading. main.js then reuses it
-   (window.PhotoLayout) for resizes and the S/M/L control, and its own copy of
-   the row code is deleted. It also carries the re-tuned row targets and costs
-   from the Feature 2 review (S/M/L visibly different, bigger phone/tablet
-   thumbnails).
+   The build (tools/build.mjs) inlines this file directly after the gallery
+   markup, so rows get their final size before the first paint and before any
+   lazy image chooses which file to download. Run `npm run build` after
+   editing it. main.js reuses it (window.PhotoLayout) on resize and for the
+   S/M/L control.
    ========================================================================== */
 (function () {
   'use strict';
@@ -94,25 +89,27 @@
   }
 
   /**
-   * Keep each thumbnail sharp without ever downloading it twice. Before a
-   * lazy image has started, it gets its exact width. Anything already
-   * downloading keeps the estimate it started with; once it has loaded we ask
-   * for a larger file only if it is genuinely too small (e.g. after switching
-   * to L). Changing `sizes` mid-download makes browsers fetch the image again.
+   * Keep each thumbnail sharp without ever downloading it twice. A lazy image
+   * that hasn't picked a file yet (off screen: no currentSrc) gets its exact
+   * width. Everything else keeps the estimate it started with: eager images
+   * may already have been fetched by the browser's preload scanner, and
+   * changing `sizes` mid-download makes browsers fetch the image again. Once
+   * loaded, an image is upgraded only if it is genuinely too small (e.g.
+   * after switching to L).
    */
   var pendingWidth = typeof WeakMap === 'function' ? new WeakMap() : null;
 
-  function updateSizes(picture, width, notStarted) {
+  function updateSizes(picture, width) {
     var img = picture && picture.querySelector('img');
     if (!img) return;
-    if (notStarted) return setSizes(picture, width);
+    if (!img.currentSrc && img.loading === 'lazy') return setSizes(picture, width);
     if (!(img.complete && img.naturalWidth)) {
       if (!pendingWidth) return;
       if (!pendingWidth.has(img)) {
         img.addEventListener('load', function () {
           var w = pendingWidth.get(img);
           pendingWidth['delete'](img);
-          updateSizes(picture, w, false);
+          updateSizes(picture, w);
         }, { once: true });
       }
       pendingWidth.set(img, width);
@@ -123,12 +120,12 @@
     setSizes(picture, width);
   }
 
-  /** Lay out the gallery; `initial` is the first call, during page parsing. */
-  function layout(gallery, size, initial) {
+  /** Lay out the gallery at size 's' | 'm' | 'l'. Returns the width used. */
+  function layout(gallery, size) {
     // Exact (fractional) width minus 1px of slack for sub-pixel rounding;
     // the last tile of each justified row grows to absorb it.
     var width = gallery.getBoundingClientRect().width - 1;
-    if (width <= 0) return false;
+    if (width <= 0) return 0;
     var tiles = gallery.querySelectorAll('.tile');
     var ratios = [];
     for (var i = 0; i < tiles.length; i++) {
@@ -147,12 +144,11 @@
         tile.style.setProperty('--w', w + 'px');
         tile.style.setProperty('--h', Math.round(row.height * 100) / 100 + 'px');
         tile.classList.toggle('is-row-end', row.justified && k === row.end - 1);
-        var img = tile.querySelector('img');
-        updateSizes(tile.querySelector('picture'), w, initial && img && img.loading === 'lazy');
+        updateSizes(tile.querySelector('picture'), w);
       }
     }
     gallery.classList.add('is-justified');
-    return true;
+    return width;
   }
 
   /** Fade thumbnails in as they arrive (only those not already decoded). */
@@ -174,6 +170,6 @@
   var gallery = document.getElementById('gallery');
   if (gallery) {
     fadeIn(gallery);
-    layout(gallery, document.documentElement.getAttribute('data-size') || 'm', true);
+    layout(gallery, document.documentElement.getAttribute('data-size') || 'm');
   }
 })();

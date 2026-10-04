@@ -1,9 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <style>
-    .f { fill: none; stroke: #151515; stroke-width: 2.5; }
-    .d { fill: #151515; }
-    @media (prefers-color-scheme: dark) { .f { stroke: #ececea; } .d { fill: #ececea; } }
-  </style>
-  <path class="f" d="M3 10V3h7M22 3h7v7M29 22v7h-7M10 29H3v-7"/>
-  <circle class="d" cx="16" cy="16" r="4.5"/>
+  <rect width="32" height="32" rx="7" fill="#151515"/>
+  <path d="M7 12V7h5M20 7h5v5M25 20v5h-5M12 25H7v-5" fill="none" stroke="#ececea" stroke-width="2"/>
+  <circle cx="16" cy="16" r="3.5" fill="#ececea"/>
 </svg>

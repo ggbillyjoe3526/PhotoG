@@ -2,9 +2,11 @@
 /**
  * Photo build for the portfolio.  Run `npm run build -- --help` for options.
  *
+ *  site.json               your name, bio and contact details
  *  photos/                 your originals (never published, git-ignored)
  *  photos/details.json     optional per-photo text overrides (tracked)
  *  assets/gallery/         generated AVIF + JPEG sizes (published)
+ *  assets/js/layout.js     gallery row layout, inlined after the gallery
  *  index.html              the <!-- build:… --> regions are rewritten
  *
  * Safety rules:
@@ -34,6 +36,8 @@ const SRC_DIR = path.join(ROOT, 'photos');
 const OUT_DIR = path.join(ROOT, 'assets', 'gallery');
 const OUT_URL = 'assets/gallery';
 const HTML_FILE = path.join(ROOT, 'index.html');
+const SITE_FILE = path.join(ROOT, 'site.json');
+const LAYOUT_FILE = path.join(ROOT, 'assets', 'js', 'layout.js');
 const DETAILS_FILE = path.join(SRC_DIR, 'details.json');
 const CACHE_FILE = path.join(SRC_DIR, '.build-cache.json');
 
@@ -52,9 +56,10 @@ const MARKUP = {
   eager: 4, // first N photos load immediately, the rest lazily
 };
 
-/** Target gallery row height = clamp(min, vw% of the viewport, max).
- *  Keep in sync with ROW in assets/js/main.js and --row-h in style.css. */
-const ROW = { min: 170, vw: 20, max: 360 };
+/** Target gallery row height, as CSS. Mirrors baseRowHeight() in
+ *  assets/js/layout.js and --row-h in style.css. */
+const ROW_CSS = 'clamp(220px, calc(200px + 9vw), 440px)';
+const REGIONS = ['meta', 'brand', 'stats', 'gallery', 'about', 'contact', 'footer'];
 
 const INPUT_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.tif', '.tiff']);
 const UNSUPPORTED_EXT = new Set([
@@ -80,6 +85,7 @@ Order:      photos appear in file-name order; prefix names with 01-, 02-…
 Hide:       start a file name with "_" (e.g. _draft-sunset.jpg)
 Text:       titles/captions/locations come from your photo's metadata, or
             from photos/details.json (see the "_help" entry in that file)
+Your info:  name, bio, email and links come from site.json
 Formats:    .jpg .jpeg .png .webp .avif .tif .tiff (export RAW/HEIC first)
 `;
 
@@ -270,7 +276,8 @@ async function readJson(file, fallback, warnings) {
   } catch (err) {
     try {
       const value = JSON.parse(raw.replace(/,(\s*[}\]])/g, '$1'));
-      warnings.push(`${path.relative(ROOT, file)} has trailing commas; they were ignored (and will be removed).`);
+      const rewritten = file === DETAILS_FILE ? ' (and removed)' : '';
+      warnings.push(`${path.relative(ROOT, file)} has trailing commas; they were ignored${rewritten}.`);
       return value;
     } catch {
       throw new Error(`${path.relative(ROOT, file)} is not valid JSON: ${err.message}`);
@@ -484,10 +491,11 @@ function renderTile(photo, index, total) {
   const ar = photo.width / photo.height;
   const eager = index < MARKUP.eager;
   const number = String(index + 1).padStart(Math.max(2, String(total).length), '0');
-  // A close first guess at the rendered width (rows target clamp(170px, 20vw,
-  // 360px) high). main.js refines it once the rows are laid out.
-  const row = `clamp(${ROW.min}px, ${ROW.vw}vw, ${ROW.max}px)`;
-  const sizes = `min(100vw, calc(${round(ar * 1.15, 3)} * ${row}))`;
+  // A close first guess at the rendered width (aspect ratio x a typical row
+  // height). layout.js, inlined after the gallery, gives every image that
+  // hasn't started loading its exact width before the first paint; this
+  // guess is only used by the first few (eager) photos and without JS.
+  const sizes = `min(100vw, calc(${round(ar * 1.1, 3)} * ${ROW_CSS}))`;
   const largest = photo.widths.at(-1);
   const fallback = photo.widths.find((w) => w >= 800) ?? largest;
   const attrs = [
@@ -502,29 +510,40 @@ function renderTile(photo, index, total) {
     'decoding="async"',
   ].filter(Boolean).join(' ');
 
+  // Screen readers hear the description (alt) as the link's name and the
+  // visible caption ("03 Horizon") as its description.
+  const captionId = `caption-${escapeHtml(photo.id)}`;
+  const describedBy = photo.title && photo.title !== photo.alt ? ` aria-describedby="${captionId}"` : '';
+
   return `
         <li class="tile" id="photo-${escapeHtml(photo.id)}" style="--ar:${round(ar, 4)};--tint:${photo.tint}">
           <figure>
-            <a class="tile-link" href="${photo.base}-${largest}.jpg">
+            <a class="tile-link" href="${photo.base}-${largest}.jpg"${describedBy}>
               <picture>
                 <source type="image/avif" srcset="${srcset(photo, 'avif')}" sizes="${sizes}">
                 <img ${attrs}>
               </picture>
             </a>
-            <figcaption class="tile-caption"><span class="tile-no">${number}</span> <span class="tile-title">${escapeHtml(photo.title)}</span></figcaption>
+            <figcaption class="tile-caption" id="${captionId}"><span class="tile-no">${number}</span> <span class="tile-title">${escapeHtml(photo.title)}</span></figcaption>
           </figure>
         </li>`;
 }
 
-function renderGallery(photos) {
+function renderGallery(photos, layoutJs) {
   const data = photos.map((p) => ({
     id: p.id, title: p.title, caption: p.caption, location: p.location, date: p.date,
     width: p.width, height: p.height, tint: p.tint, exif: p.exif,
   }));
+  // The row layout runs inline, right here, so rows have their final size
+  // before the first paint and before lazy images choose a file.
+  const script = layoutJs.trim().replace(/<\/(script)/gi, '<\\/$1');
   return `
       <ol class="gallery" id="gallery">${photos.map((p, i) => renderTile(p, i, photos.length)).join('')}
       </ol>
       <script type="application/json" id="gallery-data">${scriptJson(data)}</script>
+      <script>/* assets/js/layout.js (inlined by the build) */
+${script}
+      </script>
       `;
 }
 
@@ -537,23 +556,155 @@ function renderStats(photos) {
   return `${count} · ${min === max ? min : `${min}–${max}`}`;
 }
 
-function renderOpenGraph(cover, siteUrl) {
-  if (!cover) return '\n    ';
-  const w = cover.widths.filter((s) => s <= 1600).at(-1) ?? cover.widths[0];
-  const relative = `${cover.base}-${w}.jpg`;
-  // og:image must be absolute for most crawlers; derive it from og:url if set.
-  let url = relative;
-  if (siteUrl) {
-    try { url = new URL(relative, siteUrl.endsWith('/') ? siteUrl : siteUrl + '/').href; } catch { /* keep relative */ }
+/* ------------------------------------------------------------ site.json */
+
+const DEFAULT_SITE = {
+  name: 'Your Name',
+  tagline: 'Photographer',
+  description: '',
+  url: '',
+  about: { lede: '', text: [], facts: {} },
+  contact: { intro: '', email: '', links: {} },
+};
+
+const PLACEHOLDER = /\bYour Name\b|example\.com|City, Country|Client One/;
+
+/** Read site.json, check it, and normalise it. Problems become warnings. */
+async function loadSite(warnings) {
+  if (!existsSync(SITE_FILE)) {
+    throw new Error('site.json is missing. Restore it from the repository (it holds your name, bio and contact details).');
   }
-  const h = Math.round((w / cover.width) * cover.height);
+  const raw = await readJson(SITE_FILE, {}, warnings);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('site.json should contain an object like {"name": "…"}.');
+  const str = (v, label) => {
+    if (v == null) return '';
+    if (typeof v !== 'string') {
+      warnings.push(`site.json: "${label}" should be text in quotes; ignored.`);
+      return '';
+    }
+    return v.trim();
+  };
+  const map = (v, label) => {
+    if (v == null) return [];
+    if (typeof v !== 'object' || Array.isArray(v)) {
+      warnings.push(`site.json: "${label}" should be a list of "Label": "value" pairs; ignored.`);
+      return [];
+    }
+    return Object.entries(v).map(([k, val]) => [k.trim(), str(val, `${label}.${k}`)]).filter(([k, val]) => k && val);
+  };
+  const about = raw.about && typeof raw.about === 'object' ? raw.about : {};
+  const contact = raw.contact && typeof raw.contact === 'object' ? raw.contact : {};
+  const text = typeof about.text === 'string' ? [about.text] : Array.isArray(about.text) ? about.text : [];
+
+  const site = {
+    name: str(raw.name, 'name') || DEFAULT_SITE.name,
+    tagline: str(raw.tagline, 'tagline'),
+    description: str(raw.description, 'description'),
+    url: str(raw.url, 'url'),
+    lede: str(about.lede, 'about.lede'),
+    text: text.map((t, i) => str(t, `about.text[${i}]`)).filter(Boolean),
+    facts: map(about.facts, 'about.facts'),
+    intro: str(contact.intro, 'contact.intro'),
+    email: str(contact.email, 'contact.email'),
+    links: [],
+  };
+  if (!str(raw.name, 'name')) warnings.push('site.json: "name" is empty; showing "Your Name".');
+
+  if (site.url) {
+    try {
+      const u = new URL(site.url);
+      if (!/^https?:$/.test(u.protocol)) throw new Error('not http(s)');
+      site.url = u.href.endsWith('/') ? u.href : `${u.href}/`;
+    } catch {
+      warnings.push(`site.json: "url" (${site.url}) isn't a web address like https://yourname.com/; ignored.`);
+      site.url = '';
+    }
+  }
+  if (site.email && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(site.email)) {
+    warnings.push(`site.json: "email" (${site.email}) doesn't look like an email address; it was left out.`);
+    site.email = '';
+  }
+  for (const [label, url] of map(contact.links, 'contact.links')) {
+    try {
+      const u = new URL(url);
+      if (!/^(https?|mailto|tel):$/.test(u.protocol)) throw new Error('scheme');
+      site.links.push([label, u.href]);
+    } catch {
+      warnings.push(`site.json: the link "${label}" (${url}) should start with https://; it was left out.`);
+    }
+  }
+  if (PLACEHOLDER.test(JSON.stringify(raw))) {
+    warnings.push('site.json still contains placeholder text (e.g. "Your Name", hello@example.com). Replace it with your own details.');
+  }
+  return site;
+}
+
+function renderMeta(site, cover) {
+  const title = `${site.name} — Photography`;
+  const lines = [
+    `<title>${escapeHtml(title)}</title>`,
+    site.description && `<meta name="description" content="${escapeHtml(site.description)}">`,
+    `<meta name="author" content="${escapeHtml(site.name)}">`,
+    site.url && `<link rel="canonical" href="${escapeHtml(site.url)}">`,
+    '<meta property="og:type" content="website">',
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    site.description && `<meta property="og:description" content="${escapeHtml(site.description)}">`,
+    site.url && `<meta property="og:url" content="${escapeHtml(site.url)}">`,
+  ];
+  if (cover) {
+    const w = cover.widths.filter((x) => x <= 1600).at(-1) ?? cover.widths[0];
+    const relative = `${cover.base}-${w}.jpg`;
+    // og:image must be an absolute address for most link-preview crawlers.
+    const url = site.url ? new URL(relative, site.url).href : relative;
+    lines.push(
+      `<meta property="og:image" content="${escapeHtml(url)}">`,
+      `<meta property="og:image:width" content="${w}">`,
+      `<meta property="og:image:height" content="${Math.round((w / cover.width) * cover.height)}">`,
+      `<meta property="og:image:alt" content="${escapeHtml(cover.alt)}">`,
+      '<meta name="twitter:card" content="summary_large_image">',
+    );
+  }
+  return `\n    ${lines.filter(Boolean).join('\n    ')}\n    `;
+}
+
+function renderBrand(site) {
   return `
-    <meta property="og:image" content="${escapeHtml(url)}">
-    <meta property="og:image:width" content="${w}">
-    <meta property="og:image:height" content="${h}">
-    <meta property="og:image:alt" content="${escapeHtml(cover.alt)}">
-    <meta name="twitter:card" content="summary_large_image">
-    `;
+        <h1 class="brand-name"><a href="./">${escapeHtml(site.name)}</a></h1>${site.tagline ? `
+        <p class="brand-line">${escapeHtml(site.tagline)}</p>` : ''}
+      `;
+}
+
+function renderAbout(site) {
+  const parts = [];
+  if (site.lede) parts.push(`<p class="lede">${escapeHtml(site.lede)}</p>`);
+  for (const t of site.text) parts.push(`<p>${escapeHtml(t)}</p>`);
+  if (site.facts.length) {
+    parts.push(`<dl class="facts">${site.facts.map(([k, v]) => `
+            <div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`).join('')}
+          </dl>`);
+  }
+  return `\n          ${parts.join('\n          ')}\n        `;
+}
+
+function renderContact(site) {
+  const parts = [];
+  if (site.intro) parts.push(`<p class="contact-intro">${escapeHtml(site.intro)}</p>`);
+  if (site.email) parts.push(`<a class="contact-email" href="mailto:${escapeHtml(site.email)}">${escapeHtml(site.email)}</a>`);
+  if (site.links.length) {
+    parts.push(`<ul class="contact-links">${site.links.map(([label, url]) => {
+      const external = /^https?:/.test(url);
+      const attrs = external ? ' rel="me noopener" target="_blank"' : '';
+      const hint = external ? '<span class="visually-hidden"> (opens in a new tab)</span>' : '';
+      return `
+            <li><a href="${escapeHtml(url)}"${attrs}>${escapeHtml(label)}${hint}</a></li>`;
+    }).join('')}
+          </ul>`);
+  }
+  return `\n          ${parts.join('\n          ')}\n        `;
+}
+
+function renderFooter(site) {
+  return `© <span data-year>${new Date().getFullYear()}</span> ${escapeHtml(site.name)}. All rights reserved.`;
 }
 
 function regionPattern(name) {
@@ -582,9 +733,10 @@ async function main() {
   const warnings = [];
 
   let html = await readFile(HTML_FILE, 'utf8');
+  for (const name of REGIONS) readRegion(html, name); // fail fast on missing markers
   const publishedCount = (readRegion(html, 'gallery').match(/class="tile"/g) ?? []).length;
-  readRegion(html, 'og');
-  readRegion(html, 'stats');
+  const site = await loadSite(warnings);
+  const layoutJs = await readFile(LAYOUT_FILE, 'utf8');
 
   await mkdir(SRC_DIR, { recursive: true });
   await mkdir(OUT_DIR, { recursive: true });
@@ -716,13 +868,16 @@ async function main() {
   await writeIfChanged(DETAILS_FILE, JSON.stringify(nextDetails, null, 2) + '\n');
 
   // index.html
-  const siteUrl = /<meta\s+property="og:url"\s+content="([^"]*)"/.exec(html)?.[1]?.trim();
   const coverKey = nextDetails._cover;
   const cover = photos.find((p) => p.id === coverKey) ?? photos[0];
   if (coverKey && cover?.id !== coverKey) warnings.push(`details.json: "_cover" is "${coverKey}", but no photo has that name; using the first photo.`);
-  html = replaceRegion(html, 'og', renderOpenGraph(cover, siteUrl));
+  html = replaceRegion(html, 'meta', renderMeta(site, cover));
+  html = replaceRegion(html, 'brand', renderBrand(site));
   html = replaceRegion(html, 'stats', renderStats(photos));
-  html = replaceRegion(html, 'gallery', renderGallery(photos));
+  html = replaceRegion(html, 'gallery', renderGallery(photos, layoutJs));
+  html = replaceRegion(html, 'about', renderAbout(site));
+  html = replaceRegion(html, 'contact', renderContact(site));
+  html = replaceRegion(html, 'footer', renderFooter(site));
   const htmlChanged = await writeIfChanged(HTML_FILE, html);
 
   // Summary, in gallery order.
@@ -745,7 +900,7 @@ async function main() {
       `(${weakAlt.map((p) => p.id).join(', ')}). Add "alt" (or a caption) in photos/details.json.`,
     );
   }
-  if (!siteUrl) warnings.push('og:url in index.html is empty, so link previews (social, messaging) will show no image. Set it once the site is live.');
+  if (!site.url) warnings.push('"url" in site.json is empty, so link previews (social, messaging) will show no image. Set it once the site is live.');
   if (kept.length) warnings.push(`details.json keeps text for photos that are not in photos/: ${kept.join(', ')}. Delete those entries if you no longer need them.`);
   if (!photos.length) warnings.push('The gallery is empty. Add .jpg/.png/.webp/.tif files to photos/ and run again.');
   if (warnings.length) {
