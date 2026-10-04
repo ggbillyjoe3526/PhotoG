@@ -1,11 +1,13 @@
 // Dev check: switching S/M/L keeps the photo at the centre of the screen in place.
-// Serve the repo on :8123 first.
+// Serve the repo first (npx http-server -p 8123 -c-1 -s .), then:
+//   node tools/dev/anchor-check.mjs [baseUrl]
 import { chromium } from 'playwright';
+const BASE = process.argv[2] ?? 'http://127.0.0.1:8123/';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const centre = () => { const cx = innerWidth / 2, cy = innerHeight / 2; let best, d = 1e9; for (const t of document.querySelectorAll('.tile')) { const r = t.getBoundingClientRect(); const dx = Math.max(r.left - cx, 0, cx - r.right), dy = Math.max(r.top - cy, 0, cy - r.bottom); if (dx * dx + dy * dy < d) { d = dx * dx + dy * dy; best = t; } } return best.id; };
 for (const [w, h] of [[1440, 900], [390, 844]]) {
   const page = await browser.newPage({ viewport: { width: w, height: h } });
-  await page.goto('http://127.0.0.1:8123/', { waitUntil: 'networkidle' });
+  await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.evaluate(() => scrollTo({ top: 1400, behavior: 'instant' }));
   const res = [];
   for (const s of ['s', 'l', 'm', 'l', 's']) {

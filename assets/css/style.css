@@ -432,6 +432,15 @@ html:not(.js) .size-control {
   cursor: zoom-in;
 }
 
+/* Clicked while the viewer is still loading: it opens in a moment. */
+.tile-link.is-holding {
+  cursor: progress;
+}
+
+.tile-link.is-holding picture {
+  opacity: 0.7;
+}
+
 .tile picture {
   display: block;
   aspect-ratio: var(--ar);
@@ -1062,7 +1071,7 @@ html.viewer-open {
   }
 
   /* No arrows beside the counter here, so its backing is symmetric. */
-  .viewer-count.is-over-photo {
+  .viewer .viewer-count.is-over-photo {
     height: 36px;
     padding: 0 14px;
   }
@@ -1142,7 +1151,6 @@ html.viewer-open {
   padding: 14px max(var(--gutter), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
   max-height: var(--info-max, none);
   overflow-y: hidden; /* scrolls (and takes focus) only when it must: */
-  touch-action: pan-y; /* a long caption can scroll; sideways swipes still navigate */
 }
 
 .viewer.is-info-hidden .viewer-info,
@@ -1155,6 +1163,7 @@ html.viewer-open {
    reads as "more below". */
 .viewer-info.is-scrollable {
   overflow-y: auto;
+  touch-action: pan-y; /* the text scrolls; sideways swipes still navigate */
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   padding-bottom: max(28px, env(safe-area-inset-bottom));

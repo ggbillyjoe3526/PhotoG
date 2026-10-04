@@ -402,6 +402,9 @@
     function onResize(force) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(function () {
+        // Behind an open viewer the gallery's width is held; the viewer
+        // calls relayout() itself when it closes (see viewer.js).
+        if (root.classList.contains('viewer-open')) return;
         var widthChanged = force === true || Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5;
         // Height only matters for the short-screen cap; ignore small changes
         // such as a phone's address bar showing and hiding while scrolling.
@@ -472,7 +475,7 @@
       control.classList.add('is-ready');
     }
 
-    return { gallery: gallery, tiles: tiles };
+    return { gallery: gallery, tiles: tiles, relayout: relayout };
   }
 
   /* ----------------------------------------------------------------- start */
@@ -483,6 +486,7 @@
   // Shared with viewer.js.
   var shared = window.Portfolio = {
     gallery: gallery && gallery.gallery, tiles: gallery ? gallery.tiles : [], store: store, partition: partition,
+    relayout: gallery ? gallery.relayout : function () {},
     viewerReady: false, heldLink: null,
   };
 
@@ -494,14 +498,16 @@
     var follow = function () {
       var link = shared.heldLink;
       shared.heldLink = null;
-      if (link) window.location.href = link.href;
+      if (link) { link.classList.remove('is-holding'); window.location.href = link.href; }
     };
     shared.gallery.addEventListener('click', function (event) {
       var link = event.target.closest && event.target.closest('.tile-link');
       if (!link || shared.viewerReady || root.classList.contains('no-viewer')) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
+      if (shared.heldLink) shared.heldLink.classList.remove('is-holding');
       shared.heldLink = link;
+      link.classList.add('is-holding'); // "on its way"
       clearTimeout(holdTimer);
       holdTimer = setTimeout(follow, 3000);
     });

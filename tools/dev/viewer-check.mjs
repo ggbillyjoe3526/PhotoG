@@ -445,8 +445,11 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   const over = await page.evaluate(() => [...document.querySelectorAll('.is-over-photo')].map((e) => e.className));
   check('no dark backings when the photo sits clear of the controls (opened from the top edge)', over.length === 0, over.join(', '));
   await page.keyboard.press('z'); await settle(page, 500);
-  const zoomedOver = await page.evaluate(() => !!document.querySelector('.viewer-tools .is-over-photo'));
-  check('…and they appear when the zoomed photo is under the buttons', zoomedOver);
+  const zoomedOver = await page.evaluate(() => ({
+    tools: !!document.querySelector('.viewer-tools .is-over-photo'),
+    counter: !!document.querySelector('.viewer-count.is-over-photo, .viewer-count .is-over-photo'),
+  }));
+  check('…and they appear when the zoomed photo is under the buttons and the counter', zoomedOver.tools && zoomedOver.counter, JSON.stringify(zoomedOver));
   await ctx.close();
 }
 
@@ -454,22 +457,53 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
 //     leave the page for the bare JPEG); if viewer.js fails, it follows the link.
 {
   const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
-  await page.route(/viewer\.js/, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
-  await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.click('#photo-dunes .tile-link');
-  await settle(page, 2500);
+  await page.route(/viewer\.js/, async (route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); });
+  // Don't wait for DOMContentLoaded: that waits for deferred scripts, i.e.
+  // for viewer.js itself. Click as soon as the gallery is there.
+  await page.goto(base, { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.Portfolio && document.getElementById('photo-dunes'));
+  const before = await page.evaluate(() => !!window.Portfolio.viewerReady);
+  await page.click('#photo-dunes .tile-link', { noWaitAfter: true });
+  const holding = await page.evaluate(() => !!document.querySelector('#photo-dunes .tile-link.is-holding'));
+  await settle(page, 3200);
   const r = await page.evaluate(() => ({ url: location.pathname, open: document.querySelector('dialog.viewer')?.open, hash: location.hash }));
-  check('a click while viewer.js is still loading opens the viewer once it arrives', r.open && r.hash === '#photo-dunes' && !/\.jpg$/.test(r.url), JSON.stringify(r));
+  check('a click while viewer.js is still loading is held (and shown), then opens the viewer', !before && holding && r.open && r.hash === '#photo-dunes' && !/\.jpg$/.test(r.url), JSON.stringify({ before, holding, ...r }));
   await ctx.close();
 }
 {
   const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
   await page.route(/viewer\.js/, (route) => route.abort());
-  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await page.goto(base, { waitUntil: 'load' });
   await settle(page, 300);
   await Promise.all([page.waitForURL(/\.jpg$/, { timeout: 5000 }).catch(() => {}), page.click('#photo-dunes .tile-link')]);
   check('…and if viewer.js can\'t load, the click opens the image itself', /\.jpg$/.test(page.url()), page.url().split('/').pop());
   await ctx.close();
+}
+
+// 13. Turning the phone (or resizing the window) while the viewer is open:
+//     closing lands on the photo that was being viewed, in the new layout.
+{
+  const results = [];
+  for (const [from, to] of [[[390, 844], [844, 390]], [[844, 390], [390, 844]], [[1280, 800], [700, 800]]]) {
+    const touch = from[0] < 900;
+    const { ctx, page } = await newPage({ viewport: { width: from[0], height: from[1] }, isMobile: touch, hasTouch: touch, deviceScaleFactor: touch ? 3 : 1 });
+    await page.goto(base, { waitUntil: 'networkidle' });
+    await page.evaluate(() => document.getElementById('photo-concrete').scrollIntoView({ block: 'center' }));
+    await settle(page, 300);
+    await page.evaluate(() => document.querySelector('#photo-concrete .tile-link').click());
+    await settle(page, 600);
+    await page.setViewportSize({ width: to[0], height: to[1] });
+    await settle(page, 600);
+    await page.keyboard.press('Escape');
+    await settle(page, 800);
+    const r = await page.evaluate(() => {
+      const t = document.getElementById('photo-concrete').getBoundingClientRect();
+      return { top: Math.round(t.top), bottom: Math.round(t.bottom), vh: innerHeight, focus: document.activeElement.closest('.tile')?.id };
+    });
+    results.push({ size: `${from.join('x')}→${to.join('x')}`, ok: r.top >= -1 && r.bottom <= r.vh + 1 && r.focus === 'photo-concrete', ...r });
+    await ctx.close();
+  }
+  check('closing after turning or resizing lands on the photo that was open (3 cases)', results.every((x) => x.ok), JSON.stringify(results.filter((x) => !x.ok)));
 }
 
 await browser.close();

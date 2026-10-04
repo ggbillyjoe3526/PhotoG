@@ -157,6 +157,7 @@
     var suppressClick = false;
     var lastPointerType = '';
     var teardownOptions = null; // how to close once Back has been handled
+    var openedAt = null;      // window size when the viewer opened
 
     /* ----------------------------------------------------------- helpers */
     function tilePicture(i) { return tiles[i].querySelector('picture'); }
@@ -301,7 +302,7 @@
         var b = el.getBoundingClientRect();
         var w = !!r && Math.min(b.right, r.right) - Math.max(b.left, r.left);
         return !!r && b.width > 0 && w > Math.max(12, b.width * (share || 0)) &&
-          Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > 12;
+          Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > Math.min(12, b.height / 2);
       };
       // Each round button on its own; the counter as one pill.
       each(toolsGroup.querySelectorAll('.viewer-btn'), function (b) { b.classList.toggle('is-over-photo', isOver(b)); });
@@ -540,6 +541,7 @@
         // the viewer can use the whole window); hold the gallery's width so
         // nothing behind it re-flows.
         galleryApi.gallery.style.width = galleryApi.gallery.getBoundingClientRect().width + 'px';
+        openedAt = { w: window.innerWidth, h: window.innerHeight };
         root.classList.add('viewer-open');
         dialog.classList.remove('is-immersive', 'is-closing', 'is-zoomed');
         dialog.showModal();
@@ -629,6 +631,14 @@
       // Wait a frame: after Back, the browser may still restore a scroll
       // position; ours must come last.
       closeFrame = requestAnimationFrame(function () {
+        // Turned or resized while open: lay the gallery out for the new size
+        // first, so the right place is found and the photo flies back to
+        // where its tile now is.
+        if (openedAt && (openedAt.w !== window.innerWidth || openedAt.h !== window.innerHeight) && galleryApi.relayout) {
+          root.classList.remove('viewer-open');
+          galleryApi.gallery.style.width = '';
+          galleryApi.relayout();
+        }
         var tile = tiles[i];
         if (tile) {
           var r = tile.getBoundingClientRect();
@@ -1202,6 +1212,7 @@
     galleryApi.viewerReady = true;
     var held = galleryApi.heldLink;
     galleryApi.heldLink = null;
+    if (held) held.classList.remove('is-holding');
 
     /* ------------------------------------------------- deep link on load */
     var initial = indexFromHash();

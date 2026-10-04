@@ -16,7 +16,7 @@
     <meta property="og:title" content="Your Name — Photography">
     <meta property="og:description" content="Landscape and architectural photography by Your Name.">
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Person","name":"Your Name","description":"Photographer · Landscape & Architecture","sameAs":["https://instagram.com/","https://www.linkedin.com/"]}]}</script>
-    <!-- sources: site.json=3c58cf91cf photos/details.json=e999a6d75a assets/js/page.js=9774978b8e; checked by tools/check-site.mjs before publishing -->
+    <!-- sources: site.json=3c58cf91cf photos/details.json=e999a6d75a assets/js/page.js=7573c5827e; checked by tools/check-site.mjs before publishing -->
     <!-- /build:meta -->
 
     <script>
@@ -41,7 +41,7 @@
           var link = document.createElement('link');
           link.rel = 'preload';
           link.as = 'script';
-          link.href = 'assets/js/viewer.js?v=39384cf61d';
+          link.href = 'assets/js/viewer.js?v=1dec814da2';
           link.setAttribute('fetchpriority', 'high');
           link.onerror = function () { root.classList.remove('deep-link'); }; // no viewer: show the page
           document.head.appendChild(link);
@@ -56,10 +56,10 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <link rel="preload" href="assets/fonts/geist-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="assets/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="assets/css/style.css?v=9f1a03d783">
+    <link rel="stylesheet" href="assets/css/style.css?v=d34b2157ed">
 
     <!-- If the viewer can't load, photos open as plain images (see page.js). -->
-    <script src="assets/js/viewer.js?v=39384cf61d" defer onerror="document.documentElement.classList.add('no-viewer'); window.dispatchEvent(new Event('portfolio:no-viewer'))"></script>
+    <script src="assets/js/viewer.js?v=1dec814da2" defer onerror="document.documentElement.classList.add('no-viewer'); window.dispatchEvent(new Event('portfolio:no-viewer'))"></script>
   </head>
 
   <body id="top">
@@ -689,6 +689,9 @@
     function onResize(force) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(function () {
+        // Behind an open viewer the gallery's width is held; the viewer
+        // calls relayout() itself when it closes (see viewer.js).
+        if (root.classList.contains('viewer-open')) return;
         var widthChanged = force === true || Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5;
         // Height only matters for the short-screen cap; ignore small changes
         // such as a phone's address bar showing and hiding while scrolling.
@@ -759,7 +762,7 @@
       control.classList.add('is-ready');
     }
 
-    return { gallery: gallery, tiles: tiles };
+    return { gallery: gallery, tiles: tiles, relayout: relayout };
   }
 
   /* ----------------------------------------------------------------- start */
@@ -770,6 +773,7 @@
   // Shared with viewer.js.
   var shared = window.Portfolio = {
     gallery: gallery && gallery.gallery, tiles: gallery ? gallery.tiles : [], store: store, partition: partition,
+    relayout: gallery ? gallery.relayout : function () {},
     viewerReady: false, heldLink: null,
   };
 
@@ -781,14 +785,16 @@
     var follow = function () {
       var link = shared.heldLink;
       shared.heldLink = null;
-      if (link) window.location.href = link.href;
+      if (link) { link.classList.remove('is-holding'); window.location.href = link.href; }
     };
     shared.gallery.addEventListener('click', function (event) {
       var link = event.target.closest && event.target.closest('.tile-link');
       if (!link || shared.viewerReady || root.classList.contains('no-viewer')) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
+      if (shared.heldLink) shared.heldLink.classList.remove('is-holding');
       shared.heldLink = link;
+      link.classList.add('is-holding'); // "on its way"
       clearTimeout(holdTimer);
       holdTimer = setTimeout(follow, 3000);
     });

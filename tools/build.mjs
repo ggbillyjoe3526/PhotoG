@@ -1569,9 +1569,17 @@ async function build(notes, started) {
   }
   if (!failures.length && /\bYour Name\b/i.test(site.name) && plans.some((pl) => pl.status === 'encode' && pl.text.ownerName)) {
     const warn = 'site.json "name" is still "Your Name", and it is written into the image files of photos that have no ' +
-      'Artist/Copyright of their own. Set your name first (Ctrl+C to stop now): changing it later means encoding those photos again.';
+      'Artist/Copyright of their own. Set your name first: changing it later means encoding those photos again.';
     console.log(`  Note: ${warn}`);
     notes.push(warn);
+    // At a terminal, give the owner a moment to stop (not in CI or tests).
+    if (process.stdout.isTTY && !process.env.CI) {
+      for (let n = 5; n > 0; n--) {
+        process.stdout.write(`\r  Encoding starts in ${n}s (Ctrl+C to stop and set your name first)… `);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      process.stdout.write('\n');
+    }
   }
 
   // Step 2, in parallel: encode what needs it.

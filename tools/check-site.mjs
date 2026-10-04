@@ -24,8 +24,9 @@ else {
   if (changed.length) {
     problems.push(
       `index.html is out of date: ${changed.join(' and ')} changed since it was built.\n` +
-      '  Run `npm run build` on your computer (for photos/details.json: the one with your originals in photos/),\n' +
-      '  then commit and push index.html, assets/ and photos/details.json.',
+      '  Run `npm run build` on your computer, then commit and push index.html, assets/ and photos/details.json.\n' +
+      '  Use the computer with your originals in photos/ if photos/details.json changed, or if the build said a\n' +
+      '  site.json change needs them (a new name or licence, or showing more location or date detail).',
     );
   }
 }

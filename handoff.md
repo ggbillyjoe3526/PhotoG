@@ -73,9 +73,12 @@ highest-scoring version, which is why every attempt is committed.
 | Final build (whole site) | 1 | **8.8** | Two blockers (dark control backings stuck on, hiding the light-theme focus ring; landscape details column). Fixed, along with the refinements |
 | Final build | 2 | **8.8** | Three blockers (zoomed photo under the landscape details column; text-only rebuild ignoring `show`; embedded copyright keeping the placeholder name). All fixed, along with the refinements |
 | Final build | 3 | **9.0** | Three blockers (details panel couldn't be scrolled back up by touch; `gallery.json` kept hidden locations after a text-only build; undated photos re-encoded every January). All fixed, along with most refinements |
-| Final build | 4 (last) | pending | |
+| Final build | 4 (last) | **9.0** | Ties attempt 3. Two blockers (the counter's dark backing never turned on, being only 12 px tall; closing after rotating lost the visitor's place) and refinements, all fixed after the loop |
 
-**How the "keep the best" rule was applied to F1, F2 and F3.** None reached
+**Outcome.** No loop reached 9.5 in its 4 attempts, so the best-scoring
+version is kept: the final build at 9.0 (attempts 3 and 4).
+
+**How the "keep the best" rule was applied.** None reached
 9.5 in 4 attempts. Their attempt-4 findings were defects that were already
 in the best-scoring versions (the reviewers found them later, not
 regressions), so the current code, which is the best version plus fixes for
@@ -222,9 +225,14 @@ commit each attempt reviewed.
   only counts as scrollable when the overflow is 12 px or more; anything
   less falls within its bottom padding.
 - **Early clicks.** `page.js` holds a tile click until `viewer.js` arrives
-  (`Portfolio.heldLink`, opened at init). It follows the link if the
-  script's `onerror` fires (`no-viewer`) or after 3 s.
-- **Checks.** `tools/dev/viewer-check.mjs` has 52 assertions, all passing.
+  (`Portfolio.heldLink`, opened at init), showing the tile as `is-holding`.
+  It follows the link if the script's `onerror` fires (`no-viewer`) or
+  after 3 s.
+- **Resize or rotate while open.** `page.js` skips its resize handling while
+  `viewer-open` is set. If the window size changed, `teardown()` unpins the
+  gallery and calls `Portfolio.relayout()` before scrolling to the tile and
+  animating back to it.
+- **Checks.** `tools/dev/viewer-check.mjs` has 53 assertions, all passing.
   They include:
   - three zoom/Esc rounds
   - a 5-size × 17-photo landscape column sweep
@@ -232,11 +240,23 @@ commit each attempt reviewed.
   - touch scrolling of the panel
   - the backing test
   - early clicks with `viewer.js` delayed or blocked
+  - closing after rotating or resizing
 
 ## 5. Next steps, in order
 
-1. Final-build review attempts 2 to 4, as needed. Then update `README.md`
-   and this file.
+All review loops are finished. The final-build loop scored 8.8, 8.8, 9.0
+and 9.0. The fixes made after its last attempt (listed in the commit after
+`5f58a6f`) pass every automated check, but no critic has scored them.
+
+Possible next steps, if the owner wants them:
+1. Replace the placeholders: name, bio, links and real photos (see
+   `README.md`). Set the name before the first build with real photos.
+2. Optional polish the reviews called taste or low priority:
+   - Keep the desktop camera-data block's left edge fixed between photos.
+   - Sharper no-JS thumbnails on phones.
+   - Visitors with a saved S size download slightly larger first-row
+     images. This is a documented trade-off.
+3. If more changes are made, run a fresh critic review (see §2).
 
 ## 6. Working on this repo
 
@@ -257,8 +277,8 @@ npx http-server -p 8123 -c-1 -s . &           # serve
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs [url]` | 52 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
-| `anchor-check.mjs` | S/M/L keeps the centred photo in place |
+| `viewer-check.mjs [url]` | 53 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
+| `anchor-check.mjs [url]` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [url] [--throttle]` | image requests per device and size, including a rotation step; flags wasted, aborted, soft or oversized files |
 | `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |
 | `npm test` | 35 unit and integration tests for the build |
