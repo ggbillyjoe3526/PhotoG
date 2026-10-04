@@ -97,13 +97,23 @@ test('an empty photos folder never empties a published gallery', () => {
     // 1. No originals at all (a fresh copy elsewhere): the text is updated,
     //    the gallery kept exactly as it is.
     const before = html();
-    writeFileSync(site, siteText.replace(/"name": "[^"]*"/, '"name": "Text Only"'));
+    const retagged = siteText.replace(/"tagline": "[^"]*"/, '"tagline": "Text Only"');
+    writeFileSync(site, retagged);
     let r = build();
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /gallery of 2 photos was kept/);
     assert.match(html(), /Text Only/);
     assert.equal(galleryOf(html()), galleryOf(before));
     assert.equal(run('check-site.mjs').code, 0);
+
+    // The owner's name is also in the image files: shown, but not publishable.
+    writeFileSync(site, retagged.replace(/"name": "[^"]*"/, '"name": "New Name"'));
+    r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /also written into your image files/);
+    assert.match(html(), /New Name/);
+    assert.equal(run('check-site.mjs').code, 1);
+    writeFileSync(site, retagged);
 
     // 2. details.json edited there: can't be applied; the publish check says so.
     const d = details();
@@ -118,7 +128,22 @@ test('an empty photos folder never empties a published gallery', () => {
     assert.match(r.out, /photos\/details\.json changed/);
     writeFileSync(path.join(root, 'photos', 'details.json'), detailsText);
 
-    // 3. Something hidden in photos/, or no record of the gallery: refused.
+    // 3. "show": hiding is applied; showing more needs the originals.
+    const showing = (show) => writeFileSync(site, retagged.replace(/("show":\s*)\{[^}]*\}/, `$1${JSON.stringify(show)}`));
+    showing({ location: 'none', date: 'year' });
+    r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.equal(run('check-site.mjs').code, 0);
+    showing({ location: 'full', date: 'day' });
+    r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /"show" changed in a way that needs your originals/);
+    r = run('check-site.mjs');
+    assert.equal(r.code, 1);
+    assert.match(r.out, /site\.json changed/);
+    writeFileSync(site, retagged);
+
+    // 4. Something hidden in photos/, or no record of the gallery: refused.
     const now = html();
     writeFileSync(path.join(root, 'photos', '_draft.jpg'), readFileSync(path.join(hold, originals[0])));
     r = build();
@@ -282,5 +307,25 @@ test('a harmless quirk is noted; the same quirk with damage is not let through',
   assert.match(r.out, /06-quirky\.jpg: has a harmless quirk/);
   assert.equal(tiles(), 3);
   rmSync(path.join(root, 'photos', '06-quirky.jpg'));
+  assert.equal(build().code, 0);
+});
+
+test('changing the owner\'s name re-encodes photos that carry it', async () => {
+  const site = path.join(root, 'site.json');
+  const siteText = readFileSync(site, 'utf8');
+  const artistOf = async () => {
+    const f = readdirSync(path.join(root, 'assets', 'gallery')).find((x) => /^blue-[0-9a-f]{8}-320\.jpg$/.test(x));
+    const exifr = (await import('exifr')).default;
+    return (await exifr.parse(path.join(root, 'assets', 'gallery', f), { ifd0: true }))?.Artist;
+  };
+  writeFileSync(site, siteText.replace(/"name": "[^"]*"/, '"name": "Jane Doe"'));
+  try {
+    const r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /encoded again because the name, copyright or licence/);
+    assert.equal(await artistOf(), 'Jane Doe');
+  } finally {
+    writeFileSync(site, siteText);
+  }
   assert.equal(build().code, 0);
 });

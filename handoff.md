@@ -71,7 +71,8 @@ highest-scoring version, which is why every attempt is committed.
 | F3 | 3 | **8.7** | Four blockers (phone EXIF clipped, tap jump when zoomed, drag zoomed out, broken-image icon). All fixed |
 | F3 | 4 (last) | **8.9** | Ties the best F3 score. Two blockers (repeated Esc closed instead of zooming out; landscape details column overflowing upward) and refinements, all fixed after the loop |
 | Final build (whole site) | 1 | **8.8** | Two blockers (dark control backings stuck on, hiding the light-theme focus ring; landscape details column). Fixed, along with the refinements |
-| Final build | 2 | pending | |
+| Final build | 2 | **8.8** | Three blockers (zoomed photo under the landscape details column; text-only rebuild ignoring `show`; embedded copyright keeping the placeholder name). All fixed, along with the refinements |
+| Final build | 3 | pending | |
 
 **How the "keep the best" rule was applied to F1, F2 and F3.** None reached
 9.5 in 4 attempts. Their attempt-4 findings were defects that were already
@@ -114,8 +115,16 @@ commit each attempt reviewed.
   is completely empty, as on a fresh clone without the originals, the build
   keeps the gallery from that record and applies `site.json` and `page.js`.
   It does this only if the record matches the page and every image exists.
-  A `details.json` change can't be applied there: its old fingerprint is
-  kept, so the publish check flags it.
+  Some changes can't be applied there: `details.json` edits; `show` changes
+  other than hiding a field or cutting dates to the year (see `reshow()`);
+  and a new name or licence that is embedded in the image files. For those,
+  the old fingerprint is kept with a note, so the publish check blocks.
+  The manifest records `show`, the rights source (name and licence) and,
+  per photo, `ownerName`.
+- **Embedded rights.** The cache key is
+  `hash(sourceHash + ENCODE_KEY + rightsKey)`, where `rightsKey` covers the
+  artist, copyright and licence statement. Changing the site name re-encodes
+  the photos that use it, with a note.
 - **`site.json` checks.**
   - Wrong types and unknown keys, including nested ones in about, contact,
     show and licensing, produce notes.
@@ -134,12 +143,14 @@ commit each attempt reviewed.
   phone widths and then every 60 px. A unit test checks that `LAYOUT`
   matches `style.css`.
 - **Damaged cache.** A damaged `.build-cache.json` is replaced, with a note.
-- **Tests.** Run with `npm test`, 32 in total:
-  - 19 unit tests in `tools/build.test.mjs`.
-  - 13 integration tests in `tools/build.integration.test.mjs`, running the
+- **Tests.** Run with `npm test`, 34 in total:
+  - 20 unit tests in `tools/build.test.mjs`.
+  - 14 integration tests in `tools/build.integration.test.mjs`, running the
     real build in a temporary copy via `PHOTOG_ROOT`. They cover large
     cut-off and damaged JPEGs, a quirk with and without damage, 16-bit
-    colour, rename, hide, a damaged cache, and the stale-page check.
+    colour, rename, hide, a damaged cache, the stale-page check, text-only
+    rebuilds (`show`, name, `details.json`), and re-encoding after a name
+    change.
 
 ### 4.2 F2: gallery page
 
@@ -173,8 +184,8 @@ commit each attempt reviewed.
     column is a flex column with `margin-top: auto`, so it sits at the
     bottom but scrolls from the top.
   - Dark glass backings are computed from `fit`/`zoom`, not the live rect,
-    for the tools and the counter separately; more than 12 px of overlap on
-    both axes is needed. Over a photo, the focus ring is white with a dark
+    for each round button and for the counter pill; more than 12 px of
+    overlap on both axes is needed. Zooming hides the side column. Over a photo, the focus ring is white with a dark
     halo.
 - **Touch layer**, listening on the whole dialog with `touch-action: none`:
   - A tap toggles the controls and never closes the viewer.
@@ -194,9 +205,11 @@ commit each attempt reviewed.
 - **Shared links.** The head script, above the stylesheet, preloads
   `viewer.js` at high priority. A `deep-link` cover paints the viewer
   background until it opens.
-- **Checks.** `tools/dev/viewer-check.mjs` has 48 assertions, all passing.
+- **Focus.** If the focused Zoom button hides (per photo) or a side arrow
+  hides (while zoomed), focus moves to Details or Zoom.
+- **Checks.** `tools/dev/viewer-check.mjs` has 49 assertions, all passing.
   They include three zoom/Esc rounds, a 5-size × 17-photo landscape column
-  sweep, and the backing test.
+  sweep, landscape zoom panning, and the backing test.
 
 ## 5. Next steps, in order
 
@@ -222,11 +235,11 @@ npx http-server -p 8123 -c-1 -s . &           # serve
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs [url]` | 48 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
+| `viewer-check.mjs [url]` | 49 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
 | `anchor-check.mjs` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [url] [--throttle]` | image requests per device and size, including a rotation step; flags wasted, aborted, soft or oversized files |
 | `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |
-| `npm test` | 32 unit and integration tests for the build |
+| `npm test` | 34 unit and integration tests for the build |
 
 **Build edge cases to re-test after F1 changes:**
 - A Lightroom XMP file containing `&amp;` and `&#xA;`.

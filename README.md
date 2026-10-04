@@ -28,9 +28,16 @@ before every automatic publish.
 
 Your originals stay on your computer (they aren't in git). On another
 computer, or a fresh copy of the site, `photos/` is empty: `npm run build`
-then keeps the gallery exactly as it is and only applies changes to
-`site.json`. Changes to photos, or to their text in `photos/details.json`,
-need the computer with your originals.
+then keeps the gallery exactly as it is and applies your `site.json`
+changes. A few things need the computer with your originals:
+- changes to the photos, or to their text in `photos/details.json`;
+- showing more location or date detail with `"show"` (hiding them, or
+  showing just the year, works anywhere);
+- a new `"name"` or `"licensing"`, which is also written into the image
+  files themselves.
+
+The build says when that's the case, and the publish check waits until
+you've built on the computer with your originals.
 
 ## 1. Add your photographs
 
@@ -82,6 +89,9 @@ aren't hidden by the underscore. Every build lists what it hid.
   "Lisbon, Portugal · June 2024"), never the street or the exact day. You can
   change this with `"show"` in `site.json` (see section 3), and hide it for
   single photos in `photos/details.json`.
+- **Your name in the files.** Photos without their own Artist and Copyright
+  fields get your `site.json` name (for example "© 2024 Ana Ferreira"). If
+  you change the name, the build makes those images again.
 - **Your originals.** They stay on your computer: git ignores `photos/` (see
   `.gitignore`), so they're never committed or published. Keep your own backup
   of them.

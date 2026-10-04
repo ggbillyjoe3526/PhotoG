@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   decodeEntities, describe, describeJsonError, eagerSizes, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
-  isHiddenFile, nameInfo, normaliseTyped, num, pageFunction, pageSetting, rowCss, scriptJson, fileFingerprint, fingerprintComment, readFingerprints, text, widthLadder,
+  isHiddenFile, nameInfo, normaliseTyped, num, pageFunction, pageSetting, reshow, rowCss, scriptJson, fileFingerprint, fingerprintComment, readFingerprints, text, widthLadder,
 } from './build.mjs';
 
 const PAGE_JS = readFileSync(new URL('../assets/js/page.js', import.meta.url), 'utf8');
@@ -189,4 +189,18 @@ test('source fingerprints ignore line endings and a byte-order mark, and round-t
   const prints = { 'site.json': a, 'photos/details.json': '0123456789', 'assets/js/page.js': 'abcdefabcd' };
   assert.deepEqual(readFingerprints(`<head>\n    ${fingerprintComment(prints)}\n</head>`), prints);
   assert.equal(readFingerprints('<head></head>'), null);
+});
+
+test('text-only rebuilds only reduce what is shown when that is certain', () => {
+  const photos = [{ id: 'a', location: 'Cortina, Italy', date: 'October 2024' }, { id: 'b', location: '', date: 'Summer 2019' }];
+  const was = { location: 'city', date: 'month' };
+  assert.equal(reshow(photos, was, { ...was }).photos, photos);
+  let r = reshow(photos, was, { location: 'none', date: 'year' });
+  assert.ok(r.exact);
+  assert.deepEqual(r.photos.map((p) => [p.location, p.date]), [['', '2024'], ['', '2019']]);
+  r = reshow(photos, was, { location: 'country', date: 'month' }); // needs the metadata
+  assert.ok(!r.exact);
+  assert.equal(r.photos, photos);
+  assert.ok(!reshow(photos, was, { location: 'city', date: 'day' }).exact);
+  assert.ok(!reshow(photos, null, was).exact); // unknown: be safe
 });

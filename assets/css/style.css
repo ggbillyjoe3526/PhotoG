@@ -1145,10 +1145,6 @@ html.viewer-open {
   touch-action: pan-y; /* a long caption can scroll; sideways swipes still navigate */
 }
 
-.viewer-info.is-scrollable {
-  overflow-y: auto;
-}
-
 .viewer.is-info-hidden .viewer-info,
 .viewer.is-zoomed .viewer-info,
 .viewer.is-info-hidden .viewer-measure {
@@ -1158,6 +1154,7 @@ html.viewer-open {
 /* A panel taller than its room scrolls, and fades out at the bottom so it
    reads as "more below". */
 .viewer-info.is-scrollable {
+  overflow-y: auto;
   -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
   padding-bottom: max(28px, env(safe-area-inset-bottom));
@@ -1320,8 +1317,8 @@ html.viewer-open {
 
 /* Controls floating over the photo: dark glass with light icons in both
    themes, so they read on any picture. Only where they actually overlap it
-   (viewer.js sets is-over-photo on the buttons' group and the counter). */
-.viewer-tools.is-over-photo .viewer-btn,
+   (viewer.js sets is-over-photo on each round button and on the counter). */
+.viewer-tools .viewer-btn.is-over-photo,
 .viewer-count.is-over-photo {
   --fg: #f2f2f0;
   --fg-muted: #d5d5d1;
@@ -1333,7 +1330,7 @@ html.viewer-open {
 
 /* Over a photo the focus ring is white with a dark halo, so it shows on
    light and dark pictures alike. */
-.viewer-tools.is-over-photo .viewer-btn:focus-visible,
+.viewer-tools .viewer-btn.is-over-photo:focus-visible,
 .viewer-count.is-over-photo .viewer-btn:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
@@ -1362,6 +1359,7 @@ html.viewer-open {
      out of reach). */
   display: flex;
   flex-direction: column;
+  align-items: stretch; /* text and camera data share one left edge */
   gap: 12px;
   max-height: none; /* the whole height (not the bottom panel's limit) */
   /* Top: clear of the floating buttons (44px, below the safe area). */
@@ -1371,6 +1369,11 @@ html.viewer-open {
 
 .viewer.is-compact .viewer-info > :first-child {
   margin-top: auto;
+}
+
+/* Zoomed: the photo gets the whole screen (the column comes back after). */
+.viewer.is-compact.is-zoomed .viewer-info {
+  display: none;
 }
 
 .viewer.is-compact .viewer-exif {

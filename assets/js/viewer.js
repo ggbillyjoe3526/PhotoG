@@ -149,6 +149,8 @@
     var closeFrame = 0;
     var zoom = null;          // { s, x, y } while zoomed
     var infoReserve = { width: 0, height: 0 };
+    var fullFailed = false;   // the sharp file failed to load (no zoom then)
+    var teardownOptions = null; // how to close once Back has been handled
 
     /* ----------------------------------------------------------- helpers */
     function tilePicture(i) { return tiles[i].querySelector('picture'); }
@@ -288,17 +290,20 @@
      *  a photo's edge doesn't count). */
     function updateOverlap() {
       var r = photoRect();
-      [toolsGroup, countGroup].forEach(function (el) {
+      var isOver = function (el) {
         var b = el.getBoundingClientRect();
-        var over = !!r && b.width > 0 &&
+        return !!r && b.width > 0 &&
           Math.min(b.right, r.right) - Math.max(b.left, r.left) > 12 &&
           Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > 12;
-        el.classList.toggle('is-over-photo', over);
-      });
+      };
+      // Each round button on its own; the counter as one pill.
+      each(toolsGroup.querySelectorAll('.viewer-btn'), function (b) { b.classList.toggle('is-over-photo', isOver(b)); });
+      countGroup.classList.toggle('is-over-photo', isOver(countGroup));
     }
 
     /** A details panel that overflows can scroll (with a fade) and take focus. */
     function updateInfoScroll() {
+      info.classList.remove('is-scrollable'); // measure without its extra padding
       var scrollable = info.scrollHeight > info.clientHeight + 1;
       info.classList.toggle('is-scrollable', scrollable);
       if (scrollable) info.tabIndex = 0;
@@ -642,7 +647,6 @@
       }
       pushedState = false;
     }
-    var teardownOptions = null;
 
     // Safety net: if the browser closes the dialog by itself (Chrome can on a
     // repeated Esc), tidy up and drop the photo from the URL.
@@ -690,12 +694,13 @@
 
     // Nothing to zoom into once the full-size file has failed to load.
     function canZoom() { return !fullFailed && zoomScale() > 1.15; }
-    var fullFailed = false;
 
     function updateZoomButton() {
       var ok = current >= 0 && canZoom();
       dialog.classList.toggle('can-zoom', ok);
       // Only offered when there is more detail to see than the screen shows.
+      // (If it had focus, focus moves to the Details button next to it.)
+      if (!ok && !zoom && document.activeElement === zoomButton) infoButton.focus({ preventScroll: true });
       zoomButton.hidden = !ok && !zoom;
       zoomButton.setAttribute('aria-pressed', String(!!zoom));
       zoomButton.setAttribute('aria-label', zoom ? 'Zoom out' : 'Zoom to full resolution');
@@ -727,6 +732,8 @@
       var s = scale || zoomScale();
       if (frame.getAnimations) frame.getAnimations().forEach(function (a) { a.cancel(); });
       zoom = { s: s, x: fit.x, y: fit.y };
+      // The side arrows hide while zoomed; don't let focus vanish with them.
+      if (document.activeElement && document.activeElement.classList.contains('viewer-side')) zoomButton.focus({ preventScroll: true });
       if (px == null) { px = fit.x + fit.w / 2; py = fit.y + fit.h / 2; }
       // Start centred on the point that was clicked.
       var c = clampPan(dialog.clientWidth / 2 - (px - fit.x) * s, dialog.clientHeight / 2 - (py - fit.y) * s, s);

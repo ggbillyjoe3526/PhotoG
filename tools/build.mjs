@@ -710,9 +710,28 @@ async function inspectPhoto(entry, ctx) {
     buffer = await readFile(sourcePath);
     sourceHash = hash(buffer);
   }
-  cache.files[entry.fileName] = { size: info.size, mtimeMs: info.mtimeMs, hash: sourceHash };
+  // The photo's text and the rights embedded in its image files (the
+  // photo's own Artist/Copyright, else the site owner's name, and the
+  // licence page). The rights are part of the key: change them and the
+  // images are made again, so no file keeps an old name.
+  const own = [];
+  const meta = await readMetadata(buffer ?? sourcePath, entry.fileName, own);
+  let text = describe(meta, entry.override, entry.names, show);
+  const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? new Date().getFullYear();
+  const artist = text.rights.artist || site.name;
+  // (Whether the embedded rights use the site owner's name from site.json.)
+  text.ownerName = !text.rights.artist || !text.rights.copyright;
+  text.rights = {
+    artist,
+    copyright: text.rights.copyright || `© ${year} ${artist}`,
+    statement: site.licensePage || site.license,
+  };
+  text.year = year;
+  const rightsKey = hash(JSON.stringify([text.rights.artist, text.rights.copyright, text.rights.statement]), 8);
+  if (seen && seen.hash === sourceHash && seen.rights && seen.rights !== rightsKey) ctx.rightsChanged.push(entry.fileName);
+  cache.files[entry.fileName] = { size: info.size, mtimeMs: info.mtimeMs, hash: sourceHash, rights: rightsKey };
 
-  const key = hash(sourceHash + ENCODE_KEY, 8);
+  const key = hash(sourceHash + ENCODE_KEY + rightsKey, 8);
   const id = `${entry.names.fileSlug}-${key}`;
   if (seenKeys.has(key)) notes.push(`${entry.fileName} is identical to ${seenKeys.get(key)}.`);
   else seenKeys.set(key, entry.fileName);
@@ -737,6 +756,7 @@ async function inspectPhoto(entry, ctx) {
       const blank = (v) => !v || (typeof v === 'object' && Object.values(v).every((x) => x === '' || x == null));
       if (old && !blank(old) && blank(here)) {
         entry.override = old;
+        text = { ...describe(meta, entry.override, entry.names, show), rights: text.rights, year: text.year, ownerName: text.ownerName };
         ctx.moves.set(known.slug, entry.names.slug);
         notes.push(`details.json: the text for "${known.slug}" moved to "${entry.names.slug}" with the renamed photo.`);
       }
@@ -752,19 +772,6 @@ async function inspectPhoto(entry, ctx) {
       }
     }
   }
-
-  const own = [];
-  const meta = await readMetadata(buffer ?? sourcePath, entry.fileName, own);
-  const text = describe(meta, entry.override, entry.names, show);
-  // Rights embedded in the images: the photo's own, else the site owner's.
-  const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? new Date().getFullYear();
-  const artist = text.rights.artist || site.name;
-  text.rights = {
-    artist,
-    copyright: text.rights.copyright || `© ${year} ${artist}`,
-    statement: site.licensePage || site.license,
-  };
-  text.year = year;
 
   if (status === 'encode') {
     buffer ??= await readFile(sourcePath);
@@ -1097,8 +1104,15 @@ async function loadSite(notes) {
   }
   if (!site.lede && !site.text.length && !site.facts.length) notes.push('site.json: "about" is empty, so the About section will be blank.');
   if (!site.email && !site.links.length) notes.push('site.json: no email or links in "contact", so the Contact section will be blank.');
-  if (PLACEHOLDER.test(JSON.stringify(raw))) {
-    notes.push('site.json still contains placeholder text (e.g. "Your Name", hello@example.com). Replace it with your own details.');
+  // Placeholder text the site ships with, by field ("about.facts.Clients").
+  const placeholders = [];
+  const walk = (v, at) => {
+    if (typeof v === 'string') { if (PLACEHOLDER.test(v)) placeholders.push(at); return; }
+    if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) if (!k.startsWith('_')) walk(x, Array.isArray(v) ? `${at}[${k}]` : at ? `${at}.${k}` : k);
+  };
+  walk(raw, '');
+  if (placeholders.length) {
+    notes.push(`site.json still has sample text in ${list(placeholders.map((f) => `"${f}"`), 6)}. Replace it with your own details.`);
   }
   return site;
 }
@@ -1375,7 +1389,7 @@ async function loadManifest(previousIds) {
     const photos = Array.isArray(m.photos) ? m.photos : null;
     if (!photos || photos.map((p) => p.id).join('\n') !== previousIds.join('\n')) return null;
     if (!await allExist(photos.flatMap((p) => p.files ?? ['(missing)']))) return null;
-    return { photos, cover: photos.find((p) => p.id === m.cover) ?? photos[0] };
+    return { photos, cover: photos.find((p) => p.id === m.cover) ?? photos[0], show: m.show ?? null, rights: m.rights ?? null };
   } catch {
     return null;
   }
@@ -1386,10 +1400,42 @@ async function loadManifest(previousIds) {
  * the originals aren't in git): keep the gallery exactly as it is and apply
  * site.json and page.js. details.json text needs the originals.
  */
+/**
+ * The gallery's text at a new "show" level, worked out from the text as last
+ * built, where that is certain: hiding locations or dates, or cutting dates
+ * down to the year. Anything else (showing more, or city → country) needs
+ * the photos' metadata, so `exact` is false and the text is left as it was.
+ */
+export function reshow(photos, from, to) {
+  if (from && from.location === to.location && from.date === to.date) return { photos, exact: true };
+  let exact = !!from;
+  const out = photos.map((p) => ({ ...p }));
+  if (from && from.location !== to.location) {
+    if (to.location === 'none') out.forEach((p) => { p.location = ''; });
+    else exact = false;
+  }
+  if (from && from.date !== to.date) {
+    if (to.date === 'none') out.forEach((p) => { p.date = ''; });
+    else if (to.date === 'year' && from.date !== 'none') out.forEach((p) => { p.date = /\b(1[89]\d\d|2\d{3})\b/.exec(p.date)?.[1] ?? ''; });
+    else exact = false;
+  }
+  return exact ? { photos: out, exact } : { photos, exact };
+}
+
 async function textOnlyBuild(html, kept, { site, pageJs, notes, started }) {
   const before = readFingerprints(html) ?? {};
   const prints = await currentFingerprints();
   const details = 'photos/details.json';
+  // How much location and date to show ("show" in site.json).
+  const shown = reshow(kept.photos, kept.show, site.show);
+  if (!shown.exact) {
+    notes.push(
+      'site.json "show" changed in a way that needs your originals (only hiding locations or dates, or showing\n' +
+      '    just the year, can be done without them). The gallery text was left as it was; build on the computer\n' +
+      '    with your originals before publishing (the publish check will stop until then).',
+    );
+    if (before['site.json']) prints['site.json'] = before['site.json'];
+  }
   if (before[details] && before[details] !== prints[details]) {
     notes.push(
       'photos/details.json has changed, but its text can only be applied with your originals in photos/.\n' +
@@ -1397,7 +1443,21 @@ async function textOnlyBuild(html, kept, { site, pageJs, notes, started }) {
     );
     prints[details] = before[details];
   }
-  const changed = await writeSite(html, { site, photos: kept.photos, pageJs, cover: kept.cover, prints });
+  // The name and licence embedded in the image files themselves.
+  const r = kept.rights;
+  const staleRights = !r || r.license !== site.license || r.licensePage !== site.licensePage ||
+    (r.name !== site.name && kept.photos.some((p) => p.ownerName !== false));
+  if (staleRights) {
+    notes.push(
+      'site.json "name" or "licensing" changed, and it is also written into your image files, which can only be\n' +
+      '    made again with your originals. The page shows the change; build on the computer with your originals\n' +
+      '    before publishing (the publish check will stop until then).',
+    );
+    if (before['site.json']) prints['site.json'] = before['site.json'];
+  }
+  const photos = shown.photos;
+  const cover = photos.find((p) => p.id === kept.cover?.id) ?? photos[0];
+  const changed = await writeSite(html, { site, photos, pageJs, cover, prints });
   console.log(
     `No originals in photos/, so the gallery of ${kept.photos.length} photos was kept as it is and only the text ` +
     `from site.json was applied (${((Date.now() - started) / 1000).toFixed(1)}s, ` +
@@ -1456,6 +1516,7 @@ async function build(notes, started) {
     seenKeys: new Map(),
     slugs: new Set(entries.map((e) => e.names.slug)),
     moves: new Map(),
+    rightsChanged: [],
   };
   const plans = [];
   for (const entry of entries) {
@@ -1464,6 +1525,11 @@ async function build(notes, started) {
     } catch (err) {
       failures.push({ file: entry.fileName, message: explainError(err, entry.fileName) });
     }
+  }
+
+  if (ctx.rightsChanged.length) {
+    notes.push(`${ctx.rightsChanged.length} photo${ctx.rightsChanged.length === 1 ? ' was' : 's were'} encoded again because the name, copyright or licence ` +
+      `embedded in the image files changed (site.json "name" or "licensing"): ${list(ctx.rightsChanged)}.`);
   }
 
   // Step 2, in parallel: encode what needs it.
@@ -1523,6 +1589,8 @@ async function build(notes, started) {
   await writeIfChanged(MANIFEST_FILE, JSON.stringify({
     note: 'Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don\'t edit.',
     cover: cover?.id ?? '',
+    show: site.show,
+    rights: { name: site.name, license: site.license, licensePage: site.licensePage },
     photos: photos.map(({ file, status, ...p }) => p),
   }, null, 1) + '\n');
   const htmlChanged = await writeSite(html, { site, photos, pageJs, cover, prints: await currentFingerprints() });

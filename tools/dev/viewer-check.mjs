@@ -386,6 +386,31 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   check('landscape phones: details column below the buttons, nothing cut off sideways (5 sizes x 17 photos)', !bad.length, bad.slice(0, 4).join('; '));
 }
 
+// 10b. Landscape phone: zooming hides the details column, and the photo can
+//      be panned all the way to its right edge.
+{
+  const { ctx, page } = await newPage({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+  await page.goto(base + '#photo-ridgelines', { waitUntil: 'networkidle' });
+  await settle(page, 400);
+  // Double-tap (zooms to at least 2x), then pan as far right as it goes.
+  const cdp = await ctx.newCDPSession(page);
+  for (let t = 0; t < 2; t++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 300, y: 200 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(80);
+  }
+  await settle(page, 500);
+  for (let i = 0; i < 30; i++) await page.keyboard.press('ArrowRight');
+  await settle(page, 200);
+  const r = await page.evaluate(() => {
+    const info = getComputedStyle(document.querySelector('.viewer-info')).display;
+    const f = document.querySelector('.viewer-frame').getBoundingClientRect();
+    return { zoomed: document.querySelector('.viewer').classList.contains('is-zoomed'), info, width: Math.round(f.width), right: Math.round(f.right), vw: innerWidth };
+  });
+  check('landscape phone zoomed: details hidden, photo pans to its right edge', r.zoomed && r.info === 'none' && r.width > r.vw && Math.abs(r.right - r.vw) <= 1, JSON.stringify(r));
+  await ctx.close();
+}
+
 // 11. Dark backings only where the controls are really over the photo: open
 //     a tile from the very top of the screen (the open animation passes
 //     under the bar) and check once it has settled.
@@ -398,7 +423,7 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   const over = await page.evaluate(() => [...document.querySelectorAll('.is-over-photo')].map((e) => e.className));
   check('no dark backings when the photo sits clear of the controls (opened from the top edge)', over.length === 0, over.join(', '));
   await page.keyboard.press('z'); await settle(page, 500);
-  const zoomedOver = await page.evaluate(() => document.querySelector('.viewer-tools').classList.contains('is-over-photo'));
+  const zoomedOver = await page.evaluate(() => !!document.querySelector('.viewer-tools .is-over-photo'));
   check('…and they appear when the zoomed photo is under the buttons', zoomedOver);
   await ctx.close();
 }
