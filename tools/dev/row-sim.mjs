@@ -1,25 +1,20 @@
-// Simulates gallery rows for several widths and S/M/L (run from the repo root).
+// Simulates gallery rows for several widths and S/M/L using the real
+// partition() from assets/js/page.js (run from the repo root after a build).
 import fs from 'node:fs';
-const html = fs.readFileSync('index.html','utf8');
-const data = JSON.parse(html.match(/id="gallery-data">([^<]*)</)[1]);
-const ratios = data.map(p => p.width/p.height);
-const F = { s: 0.6, m: 1, l: 1.75 };
-function base(W) { return Math.max(220, Math.min(440, 200 + 0.09 * W)); }
-function partition(ratios, width, gap, target, minTile) {
-  const n = ratios.length, cost = Array(n+1).fill(Infinity), from = Array(n+1); cost[0]=0;
-  for (let end=1; end<=n; end++) { let sum=0, minAr=Infinity;
-    for (let start=end-1; start>=0 && end-start<=12; start--) { sum+=ratios[start]; minAr=Math.min(minAr, ratios[start]); const count=end-start; const h=(width-gap*(count-1))/sum;
-      if (h < target*0.4 && count>1) break;
-      let c = 0;
-      if (!(end===n && h > target*1.3)) {
-        const d=Math.log(h/target); c=d*d*(h>target?1.5:1);
-        if (h>target*1.3) { const e=Math.log(h/(target*1.3)); c+=4*e*e; }
-        if (h<target*0.8) { const e=Math.log(h/(target*0.8)); c+=4*e*e; }
-        if (count>1 && h*minAr < minTile) c += 10;
-      }
-      if (cost[start]+c<cost[end]) { cost[end]=cost[start]+c; from[end]=start; } } }
-  const rows=[]; for (let e=n; e>0; e=from[e]) { const s=from[e]; let t=0; for(let i=s;i<e;i++) t+=ratios[i]; let h=(width-gap*(e-s-1))/t; const j=!(e===n && h>target*1.3); rows.unshift(`${e-s}@${Math.round(j?h:target)}${j?'':'r'}`); } return rows;
-}
-for (const [W,gap,vh] of [[357,6,844],[767,8,1180],[1185,10,800],[1333,11,900],[1810,12,1080],[2200,12,1300]]) {
-  for (const s of ['s','m','l']) { const t = base(W)*(W<600 && s==='s' ? 0.45 : F[s]); console.log(String(W).padStart(4), s, 'target', Math.round(t), partition(ratios, W, gap, t, W<600?64:80).join(' ')); }
+const src = fs.readFileSync('assets/js/page.js', 'utf8');
+const fn = src.slice(src.indexOf('  function partition('), src.indexOf('  /* ---- choosing thumbnail files */'));
+const ROW = Function(`return ${/var ROW = (\{[^}]*\})/.exec(src)[1]}`)();
+const partition = Function('MAX_PER_ROW', `${fn}; return partition;`)(12);
+const html = fs.readFileSync('index.html', 'utf8');
+const ratios = JSON.parse(html.match(/id="gallery-data">([^<]*)</)[1]).map((p) => p.width / p.height);
+const base = (w) => Math.max(ROW.min, Math.min(ROW.max, ROW.base + ROW.vw * w));
+for (const [vw, gap] of [[390, 6], [820, 8], [1280, 10], [1440, 11], [1920, 12]]) {
+  const W = vw - 2 * Math.min(48, Math.max(16, vw * 0.032)) - 1;
+  const isPhone = vw < 600;
+  for (const [s, f] of [['S', isPhone ? 0.45 : 0.6], ['M', 1], ['L', 1.75]]) {
+    const minTile = (isPhone ? 64 : 80) * Math.min(1, f + 0.25);
+    const rows = partition(ratios, W, gap, base(W) * f, minTile);
+    const hs = rows.map((r) => Math.round(r.height));
+    console.log(`${String(vw).padStart(4)} ${s}  target ${Math.round(base(W) * f)}  ${rows.map((r, i) => `${r.end - r.start}@${hs[i]}${r.justified ? '' : 'r'}`).join(' ')}   spread ${Math.min(...hs)}-${Math.max(...hs)}`);
+  }
 }

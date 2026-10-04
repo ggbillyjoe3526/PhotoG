@@ -38,7 +38,6 @@
   --gutter: clamp(16px, 3.2vw, 48px);
   --gap: clamp(6px, 0.75vw, 12px);
   --row-gap: clamp(18px, 1.8vw, 26px);
-  --row-h: clamp(220px, calc(200px + 9vw), 440px); /* without JS; mirrors baseRowHeight() in layout.js */
   /* Side margins; on very wide screens the page stops growing at 2200px. */
   --page-gutter: max(var(--gutter), calc((100vw - 2200px) / 2));
   --section-space: clamp(88px, 11vw, 176px);
@@ -353,22 +352,26 @@ html:not(.js) .size-control {
   min-width: 28px;
   padding: 4px 6px;
   border: 0;
-  border-bottom: 1px solid transparent;
   background: none;
   color: var(--fg-muted);
   font: inherit;
   letter-spacing: inherit;
   cursor: pointer;
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+  transition: color 0.2s var(--ease);
 }
 
 .size-control button:hover {
   color: var(--fg);
 }
 
+/* The selected size is underlined: the line belongs to the letter, so it
+   stays put however large the button's touch area is, and it survives
+   forced-colours (high contrast) mode. */
 .size-control button[aria-pressed="true"] {
   color: var(--fg);
-  border-bottom-color: var(--fg);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
 }
 
 /* -------------------------------------------------------------- gallery */
@@ -391,8 +394,9 @@ html:not(.js) .size-control {
 
 .tile {
   /* Rows grow to fill the width, so start a little under the target height. */
-  flex: calc(var(--ar) * 100) 1 calc(var(--ar) * var(--row-h) * 0.8);
-  max-width: calc(var(--ar) * var(--row-h) * 1.8);
+  /* --row-h is set on the gallery by the build, from page.js. */
+  flex: calc(var(--ar) * 100) 1 calc(var(--ar) * var(--row-h, 300px) * 0.8);
+  max-width: calc(var(--ar) * var(--row-h, 300px) * 1.8);
   min-width: 0;
   scroll-margin-top: 24px;
 }
@@ -428,6 +432,7 @@ html:not(.js) .size-control {
   display: flex;
   gap: 0.9em;
   margin-top: 9px;
+  padding-right: 1.25em; /* keeps a cut-off title clear of the next one */
   overflow: hidden;
   color: var(--fg-muted);
   white-space: nowrap;
@@ -447,6 +452,13 @@ html:not(.js) .size-control {
 .tile:hover .tile-caption,
 .tile:focus-within .tile-caption {
   color: var(--fg);
+}
+
+.tile:hover .tile-title,
+.tile:focus-within .tile-title {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 /* Phones show frame numbers only (titles are in the viewer), except at L,
@@ -640,11 +652,15 @@ html[data-size="s"] .gallery {
 /* On touch screens, small controls get a 44px hit area without moving. */
 @media (pointer: coarse) {
   .site-nav a,
-  .to-top,
-  .contact-links a {
+  .to-top {
     display: inline-block;
     margin: -14px 0;
     padding: 14px 0;
+  }
+
+  .contact-links a {
+    margin: -10px 0;
+    padding: 14px 0; /* stays inline-flex, so the ↗ keeps its size */
   }
 
   .size-control button {
@@ -662,11 +678,18 @@ html[data-size="s"] .gallery {
 
 /* --------------------------------------------------------------- viewer */
 
+/* The photo is placed by viewer.js (left/top/width/height of .viewer-frame),
+   computed from the viewer's own size minus the space the controls need.
+   The bars float above the stage, so nothing here can change the photo's
+   size by accident. */
+
 html.viewer-open {
   overflow: hidden;
+  background: var(--viewer-bg); /* also behind a classic scrollbar gutter */
 }
 
 .viewer {
+  --side: 0px; /* room for the side arrows (desktop) */
   position: fixed;
   inset: 0;
   width: 100%;
@@ -683,8 +706,12 @@ html.viewer-open {
 }
 
 .viewer[open] {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: block;
+}
+
+.viewer:focus,
+.viewer:focus-visible {
+  outline: none;
 }
 
 /* The dialog itself is the full-screen surface; the backdrop stays clear so
@@ -733,105 +760,46 @@ html.viewer-open {
   transition: opacity 0.15s linear;
 }
 
-.viewer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: max(10px, env(safe-area-inset-top)) max(var(--gutter), env(safe-area-inset-right)) 10px max(var(--gutter), env(safe-area-inset-left));
-  font: 12px/1 var(--font-mono);
-  letter-spacing: 0.05em;
-  transition: opacity 0.25s var(--ease);
-}
-
-.viewer-count {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: 0;
-  color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.viewer-count strong {
-  color: var(--fg);
-  font-weight: 500;
-}
-
-.viewer-count .sep {
-  margin: 0 0.5em;
-  color: var(--fg-faint);
-}
-
-.viewer-tools {
-  display: flex;
-  gap: 4px;
-  margin-right: -10px;
-}
-
-.viewer-btn {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  color: var(--fg-muted);
-  cursor: pointer;
-  transition: color 0.2s var(--ease), opacity 0.2s var(--ease);
-}
-
-.viewer-btn:hover {
-  color: var(--fg);
-}
-
-.viewer-btn[aria-pressed="true"] {
-  color: var(--fg);
-}
-
-.viewer-btn[aria-disabled="true"] {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.viewer-btn .icon {
-  width: 20px;
-  height: 20px;
-}
-
-/* Compact prev/next beside the counter (touch and small screens). */
-.viewer-count .viewer-btn {
-  width: 40px;
-  height: 40px;
-}
-
-.viewer-count .viewer-btn:first-child {
-  margin-left: -12px;
-}
+/* ---- stage and photo */
 
 .viewer-stage {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 0;
-  padding: 0 var(--stage-x, 0px);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /* Safe areas (notches, home bar); read by viewer.js, not used for layout. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   touch-action: pinch-zoom;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.viewer-frame {
-  position: relative;
-  width: var(--fw, 100%);
-  height: var(--fh, 100%);
-  background: var(--tint, transparent);
-  transition: transform 0.3s var(--ease), opacity 0.3s var(--ease);
+.viewer.is-pinched .viewer-stage {
+  touch-action: auto; /* let one finger pan a pinch-zoomed page */
 }
 
-.viewer-frame.is-dragging {
-  transition: none;
+.viewer.is-zoomed .viewer-stage {
+  touch-action: none; /* we pan the zoomed photo ourselves */
+}
+
+.viewer-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--tint, transparent);
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.viewer-frame.is-loaded {
+  background: none;
+}
+
+.viewer.can-zoom .viewer-frame {
+  cursor: zoom-in;
+}
+
+.viewer.is-zoomed .viewer-frame {
+  cursor: zoom-out;
 }
 
 .viewer-frame img {
@@ -839,7 +807,7 @@ html.viewer-open {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover; /* the frame has the photo's ratio to the pixel */
   -webkit-user-drag: none;
 }
 
@@ -878,22 +846,73 @@ html.viewer-open {
   }
 }
 
+/* ---- buttons */
+
+.viewer-btn,
+.viewer-side {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: color 0.2s var(--ease), opacity 0.2s var(--ease);
+}
+
+.viewer-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.viewer-btn:hover,
+.viewer-side:hover,
+.viewer-btn[aria-pressed="true"] {
+  color: var(--fg);
+}
+
+.viewer-btn[aria-disabled="true"],
+.viewer-side[aria-disabled="true"] {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.viewer-btn[aria-disabled="true"]:hover,
+.viewer-side[aria-disabled="true"]:hover {
+  color: var(--fg-muted);
+}
+
+.viewer-btn .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.viewer-btn .icon-zoom-out,
+.viewer-btn[aria-pressed="true"] .icon-zoom-in {
+  display: none;
+}
+
+.viewer-btn[aria-pressed="true"] .icon-zoom-out {
+  display: block;
+}
+
+/* Side arrows: full-height strips beside the photo (desktop only). */
 .viewer-side {
   position: absolute;
-  top: 50%;
+  top: var(--strip-top, 0px);
+  bottom: var(--strip-bottom, 0px);
   z-index: 1;
   display: none;
-  width: 52px;
-  height: 52px;
-  transform: translateY(-50%);
+  width: var(--side);
 }
 
 .viewer-side.prev {
-  left: max(8px, calc(var(--gutter) - 14px));
+  left: 0;
 }
 
 .viewer-side.next {
-  right: max(8px, calc(var(--gutter) - 14px));
+  right: 0;
 }
 
 .viewer-side .icon {
@@ -902,9 +921,13 @@ html.viewer-open {
   stroke-width: 1.25;
 }
 
+.viewer-side:focus-visible {
+  outline-offset: -8px;
+}
+
 @media (hover: hover) and (pointer: fine) and (min-width: 768px) {
   .viewer {
-    --stage-x: 84px;
+    --side: 84px;
   }
 
   .viewer-side {
@@ -916,16 +939,82 @@ html.viewer-open {
   }
 }
 
+/* ---- top bar */
+
+.viewer-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3; /* above the details column on short screens */
+  display: flex;
+  flex-direction: row-reverse; /* DOM: tools first (Close is the first Tab stop) */
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(10px, env(safe-area-inset-top)) max(var(--gutter), env(safe-area-inset-right)) 10px max(var(--gutter), env(safe-area-inset-left));
+  font: 12px/1 var(--font-mono);
+  letter-spacing: 0.05em;
+  pointer-events: none; /* only its buttons take clicks */
+}
+
+.viewer-top > * {
+  pointer-events: auto;
+}
+
+.viewer-tools {
+  display: flex;
+  flex-direction: row-reverse; /* Close at the far right */
+  gap: 4px;
+  margin-right: -10px;
+}
+
+.viewer-count {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-count strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.viewer-count .sep {
+  margin: 0 0.5em;
+  color: var(--fg-faint);
+}
+
+/* Compact prev/next beside the counter (touch and small screens). */
+.viewer-count .viewer-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.viewer-count .viewer-btn:first-child {
+  margin-left: -12px;
+}
+
+/* ---- details */
+
 .viewer-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 12px 40px;
   padding: 14px max(var(--gutter), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
-  transition: opacity 0.25s var(--ease);
 }
 
-.viewer.is-info-hidden .viewer-info {
+.viewer.is-info-hidden .viewer-info,
+.viewer.is-zoomed .viewer-info {
   display: none;
 }
 
@@ -960,6 +1049,10 @@ html.viewer-open {
 .viewer-caption:empty,
 .viewer-meta:empty {
   display: none;
+}
+
+.viewer-meta span {
+  white-space: nowrap; /* never break inside a date or between "·" and text */
 }
 
 .viewer-exif {
@@ -1001,18 +1094,63 @@ html.viewer-open {
     justify-content: flex-start;
     gap: 8px 18px;
   }
-
-  .viewer-exif .exif-lens {
-    display: none;
-  }
 }
 
-/* Immersive mode (tap the photo on touch screens). */
+/* ---- short landscape screens: controls float, details form a column */
+
+.viewer.is-compact .viewer-top {
+  background: linear-gradient(var(--scrim), transparent);
+  padding-bottom: 18px;
+}
+
+.viewer.is-compact .viewer-info {
+  top: 0;
+  left: auto;
+  width: min(260px, 30vw);
+  grid-template-columns: 1fr;
+  align-content: end;
+  gap: 12px;
+  padding: 64px max(var(--gutter), env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) 20px;
+  overflow-y: auto;
+  background: var(--viewer-bg);
+}
+
+.viewer.is-compact .viewer-exif {
+  justify-content: flex-start;
+  gap: 8px 16px;
+}
+
+/* While zoomed, the bar floats over the photo too. */
+.viewer.is-zoomed .viewer-top {
+  background: linear-gradient(var(--scrim), transparent);
+  padding-bottom: 18px;
+}
+
+.viewer.is-zoomed .viewer-side {
+  display: none;
+}
+
+/* ---- immersive (tap the photo on touch screens): only the photo */
+
+.viewer-top,
+.viewer-info,
+.viewer-side {
+  transition: opacity 0.25s var(--ease), visibility 0s linear 0s;
+}
+
 .viewer.is-immersive .viewer-top,
 .viewer.is-immersive .viewer-info,
 .viewer.is-immersive .viewer-side {
   opacity: 0;
-  pointer-events: none;
+  visibility: hidden; /* not focusable or announced while hidden */
+  transition: opacity 0.25s var(--ease), visibility 0s linear 0.25s;
+}
+
+/* While the theme switches, every colour changes at once. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
 }
 
 /* ------------------------------------------------------- reduced motion */

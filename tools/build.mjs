@@ -6,7 +6,7 @@
  *  photos/                 your originals (never published, git-ignored)
  *  photos/details.json     optional per-photo text overrides (tracked)
  *  assets/gallery/         generated AVIF + JPEG sizes (published)
- *  assets/js/layout.js     gallery row layout, inlined after the gallery
+ *  assets/js/page.js       theme, gallery rows, S/M/L; inlined after the gallery
  *  index.html              the <!-- build:… --> regions are rewritten
  *
  * Safety rules:
@@ -37,7 +37,7 @@ const OUT_DIR = path.join(ROOT, 'assets', 'gallery');
 const OUT_URL = 'assets/gallery';
 const HTML_FILE = path.join(ROOT, 'index.html');
 const SITE_FILE = path.join(ROOT, 'site.json');
-const LAYOUT_FILE = path.join(ROOT, 'assets', 'js', 'layout.js');
+const PAGE_JS_FILE = path.join(ROOT, 'assets', 'js', 'page.js');
 const DETAILS_FILE = path.join(SRC_DIR, 'details.json');
 const CACHE_FILE = path.join(SRC_DIR, '.build-cache.json');
 
@@ -56,9 +56,15 @@ const MARKUP = {
   eager: 4, // first N photos load immediately, the rest lazily
 };
 
-/** Target gallery row height, as CSS. Mirrors baseRowHeight() in
- *  assets/js/layout.js and --row-h in style.css. */
-const ROW_CSS = 'clamp(220px, calc(200px + 9vw), 440px)';
+/** The gallery's target row height as CSS, built from the one definition
+ *  (`var ROW = {…}`) in assets/js/page.js. Used for the sizes hints and the
+ *  no-JS layout (--row-h on the gallery). */
+function rowCss(pageJs) {
+  const match = /var ROW = (\{[^}\n]*\})/.exec(pageJs);
+  if (!match) throw new Error('assets/js/page.js is missing its `var ROW = { … };` line.');
+  const row = Function(`return ${match[1]}`)();
+  return `clamp(${row.min}px, calc(${row.base}px + ${+(row.vw * 100).toFixed(3)}vw), ${row.max}px)`;
+}
 const REGIONS = ['meta', 'brand', 'stats', 'gallery', 'about', 'contact', 'footer'];
 
 const INPUT_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.tif', '.tiff']);
@@ -487,12 +493,12 @@ function srcset(photo, ext) {
   return photo.widths.map((w) => `${photo.base}-${w}.${ext} ${w}w`).join(', ');
 }
 
-function renderTile(photo, index, total) {
+function renderTile(photo, index, total, ROW_CSS) {
   const ar = photo.width / photo.height;
   const eager = index < MARKUP.eager;
   const number = String(index + 1).padStart(Math.max(2, String(total).length), '0');
   // A close first guess at the rendered width (aspect ratio x a typical row
-  // height). layout.js, inlined after the gallery, gives every image that
+  // height). page.js, inlined after the gallery, gives every image that
   // hasn't started loading its exact width before the first paint; this
   // guess is only used by the first few (eager) photos and without JS.
   const sizes = `min(100vw, calc(${round(ar * 1.1, 3)} * ${ROW_CSS}))`;
@@ -529,19 +535,20 @@ function renderTile(photo, index, total) {
         </li>`;
 }
 
-function renderGallery(photos, layoutJs) {
+function renderGallery(photos, pageJs) {
+  const ROW_CSS = rowCss(pageJs);
   const data = photos.map((p) => ({
     id: p.id, title: p.title, caption: p.caption, location: p.location, date: p.date,
     width: p.width, height: p.height, tint: p.tint, exif: p.exif,
   }));
   // The row layout runs inline, right here, so rows have their final size
   // before the first paint and before lazy images choose a file.
-  const script = layoutJs.trim().replace(/<\/(script)/gi, '<\\/$1');
+  const script = pageJs.trim().replace(/<\/(script)/gi, '<\\/$1');
   return `
-      <ol class="gallery" id="gallery">${photos.map((p, i) => renderTile(p, i, photos.length)).join('')}
+      <ol class="gallery" id="gallery" style="--row-h: ${ROW_CSS}">${photos.map((p, i) => renderTile(p, i, photos.length, ROW_CSS)).join('')}
       </ol>
       <script type="application/json" id="gallery-data">${scriptJson(data)}</script>
-      <script>/* assets/js/layout.js (inlined by the build) */
+      <script>/* assets/js/page.js (inlined by the build) */
 ${script}
       </script>
       `;
@@ -736,7 +743,8 @@ async function main() {
   for (const name of REGIONS) readRegion(html, name); // fail fast on missing markers
   const publishedCount = (readRegion(html, 'gallery').match(/class="tile"/g) ?? []).length;
   const site = await loadSite(warnings);
-  const layoutJs = await readFile(LAYOUT_FILE, 'utf8');
+  const pageJs = await readFile(PAGE_JS_FILE, 'utf8');
+  rowCss(pageJs); // fail fast
 
   await mkdir(SRC_DIR, { recursive: true });
   await mkdir(OUT_DIR, { recursive: true });
@@ -874,7 +882,7 @@ async function main() {
   html = replaceRegion(html, 'meta', renderMeta(site, cover));
   html = replaceRegion(html, 'brand', renderBrand(site));
   html = replaceRegion(html, 'stats', renderStats(photos));
-  html = replaceRegion(html, 'gallery', renderGallery(photos, layoutJs));
+  html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
   html = replaceRegion(html, 'about', renderAbout(site));
   html = replaceRegion(html, 'contact', renderContact(site));
   html = replaceRegion(html, 'footer', renderFooter(site));

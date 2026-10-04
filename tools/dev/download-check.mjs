@@ -39,7 +39,7 @@ for (const [w, h, dpr, mobile, size] of [
   const upgrades = Object.entries(by).filter(([, v]) => v.length > 1);
   const soft = await page.evaluate(() => [...document.querySelectorAll('.tile')].map((t) => {
     const img = t.querySelector('img');
-    const need = t.querySelector('picture').getBoundingClientRect().width * devicePixelRatio;
+    const need = t.querySelector('picture').getBoundingClientRect().width * Math.min(devicePixelRatio, 2); // thumbnails stop at 2x
     const have = +((img.currentSrc.match(/-(\d+)\.\w+$/) || [])[1] || 0);
     const largest = Math.max(...img.srcset.split(',').map((c) => parseInt(c.trim().split(' ')[1], 10)));
     return have && have < need * 0.98 && have < largest ? `${t.id.slice(6)} ${have}<${Math.round(need)}` : null;
