@@ -60,104 +60,126 @@ highest-scoring version, which is why every attempt is committed.
 |---|---|---|---|
 | F1: build pipeline (`tools/build.mjs`, `site.json`) | 1 | **7.4** | Total rework |
 | F1 | 2 | **8.7** | Refined |
-| F1 | 3 | **8.9** | Refined (every finding addressed) |
-| F1 | 4 (final) | see below | |
+| F1 | 3 | **8.9** | Best F1 score (reviewed commit `3fcdf92`) |
+| F1 | 4 (last) | **8.4** | Two blockers that earlier reviews missed (large damaged JPEGs published; 16-bit colour shift). Fixed after the loop, in `0a20ea9` |
 | F2: page shell, gallery grid, theme | 1 | **8.5** | Refined |
 | F2 | 2 | **9.2** | Refined |
-| F2 | 3 | **9.3** | Refined (every finding addressed) |
-| F2 | 4 (final) | see below | |
+| F2 | 3 | **9.3** | Best F2 score (reviewed commit `3fcdf92`) |
+| F2 | 4 (last) | **9.2** | Safe areas and slow-network double downloads. Fixed after the loop, in `0a20ea9` |
 | F3: full-screen viewer | 1 | **7.7** | Total rework (now `viewer.js`) |
 | F3 | 2 | **8.9** | Refined: a new touch layer |
-| F3 | 3 | see below | |
-| Final build | n/a | not started | |
+| F3 | 3 | **8.7** | Four blockers (phone EXIF clipped, tap jump when zoomed, drag zoomed out, broken-image icon). All fixed |
+| F3 | 4 (last) | pending | |
+| Final build (whole site) | 1 | pending | |
 
-Each feature has 4 attempts at most. If a feature hasn't reached 9.5 by its
-4th attempt, keep the best-scoring commit; this file's git history records
-which commit each attempt reviewed. Full reports were written to the session
-scratchpad (`critic/<feature>-a<attempt>/report.md`).
+**How the "keep the best" rule was applied to F1 and F2.** Neither reached
+9.5 in 4 attempts. Their attempt-4 findings were defects that were already
+in the best-scoring versions (the reviewers found them later, not
+regressions), so the current code, which is the best version plus fixes for
+everything the reviewers found, is kept rather than rolling back. The
+final-build review judges those fixes.
+
+Full reports were written to the session scratchpad
+(`critic/<feature>-a<attempt>/report.md`); the commit history records which
+commit each attempt reviewed.
 
 ## 4. Status by feature
 
 ### 4.1 F1: build pipeline
 
-- **Decoding.** Each photo is decoded once while collecting decoder warnings.
-  A short list of harmless quirks becomes a note: stray bytes, odd SOS
-  parameters, an unknown JFIF revision. Anything else, or a warning count
-  above what's shown, stops that photo.
+- **Two phases.**
+  1. One photo at a time: hash, decide whether its images can be reused
+     (unchanged, renamed, or built on another computer). A photo that needs
+     encoding gets a full-resolution integrity check first. A strict
+     `failOn: 'warning'` `stats()` pass streams every pixel. If that stops on a
+     warning that isn't damage, a full raw decode collects every warning.
+     Known harmless quirks become a note. Damage, or more warnings than
+     described, stops the build before anything is encoded. (The encoder
+     shrinks while decoding, which hides damage, hence the separate pass.
+     `stats()` emits no warning events, and `extractChannel()` loses them.)
+  2. In parallel: encode from one decoded sRGB master per photo. 16-bit files
+     with a profile get `.withIccProfile('srgb')`; untagged ones must not.
 - **Order of writes.** `details.json` and `index.html` are written before any
   generated file is deleted. Renames are retried on EPERM/EBUSY.
+- **Renames** copy the images and move the photo's `details.json` text to the
+  new name. `"hide": true` leaves a photo out but keeps its text.
+- **Stale-page guard.** `index.html` carries `<!-- sources: <hash> -->` for
+  `site.json`, `photos/details.json` and `page.js`, ignoring line endings and
+  BOM. `tools/check-site.mjs` (run in CI) fails if they changed without a
+  rebuild.
 - **`site.json` checks.**
-  - Wrong types and unknown settings produce notes.
+  - Wrong types and unknown keys, including nested ones in about, contact,
+    show and licensing, produce notes.
   - Notes appear when About or Contact would be empty.
-  - Page names are stripped from `url`.
-  - Optional `licensing` (license URL and licensing page) feeds JSON-LD
-    ImageObjects, written only when `url` is set.
-  - `og:site_name` and `og:locale` are written.
-- **Typed camera values** are normalised: "35" becomes 35mm, "5.6" f/5.6,
-  "125" 1/125s and "400" ISO 400.
-- **Camera names.** The DCF rule (`_IGP0042`, `_1000123`) means these are
-  never hidden.
-- **Tints** are taken from the smallest published JPEG, so every machine
-  produces the same colour.
-- **Sizes for the first two photos** come from running the real `partition()`
-  across screen widths, sampled densely, plus 2× variants for 3× screens. The
-  other photos are lazy and get exact sizes from `page.js`.
-- **AVIF and limits.** Quality is q64 for widths of 1600 and up, and a 2000
-  width was added. The pixel limit is raised to 1 GP, and `.jfif` is accepted.
-- **Error messages** are in plain language, including JSON errors with the
-  line, column and probable cause.
-- **Tests.** `tools/build.test.mjs` holds the unit tests and
-  `tools/build.integration.test.mjs` runs the real build in a temporary copy
-  (via `PHOTOG_ROOT`). `npm test` runs 20 tests.
-- **Publishing.** `tools/check-site.mjs` checks that every referenced file
-  exists. The Pages workflow runs `npm ci`, `npm test` and that check before
-  publishing.
+  - Page names are stripped from `url`, and `pt_PT` is accepted.
+  - Optional `licensing` feeds JSON-LD ImageObjects (only when `url` is set)
+    and the XMP WebStatement.
+- **Typed camera values:** "35" becomes 35mm, "24-70" 24–70mm, "5.6" f/5.6,
+  "125" 1/125s, "30s" stays 30s, and "400" ISO 400.
+- **Camera names** (never hidden by `_`): known prefixes, plus the DCF rule
+  in upper case only (`_IGP0042`, `_1000123`; `_old2024` is hidden).
+- **Layout settings.** `page.js` holds one-line `ROW` and `LAYOUT` settings
+  that the build reads, along with `partition()` itself, matched by braces.
+  The build uses them to compute `sizes` for the first two photos. A unit
+  test checks that `LAYOUT` matches `style.css`.
+- **Damaged cache.** A damaged `.build-cache.json` is replaced, with a note.
+- **Tests.** Run with `npm test`, 32 in total:
+  - 19 unit tests in `tools/build.test.mjs`.
+  - 13 integration tests in `tools/build.integration.test.mjs`, running the
+    real build in a temporary copy via `PHOTOG_ROOT`. They cover large
+    cut-off and damaged JPEGs, a quirk with and without damage, 16-bit
+    colour, rename, hide, a damaged cache, and the stale-page check.
 
 ### 4.2 F2: gallery page
 
 - **`page.js`** is inlined after the gallery and holds the theme, the row
-  engine, resizing and S/M/L. `main.js` and `layout.js` no longer exist.
-- **Row engine:**
-  - Neighbouring rows of uneven height cost more.
-  - The last row can be justified or left part-filled at the height of the
-    row above, whichever is cheaper. It pays for being unfilled or holding a
-    single photo, and pays extra for being taller than the row above.
-  - At M and L, rows are capped to the screen height.
-- **Thumbnails.** Capped at 2× density, and upgraded only near the viewport.
-  The first photos' `sizes` are frozen once loaded, so rotation doesn't
-  re-fetch them.
-- **Fixes:**
-  - The arrow is visible in forced colours.
-  - Hover feedback (a hairline frame and an underlined title) only on devices
-    that hover.
-  - One breakpoint, 599px.
-  - The brand links to `#top`.
-  - The toggle's title matches its label.
+  engine, resizing and S/M/L.
+- **Row engine** (dynamic programming, like line breaking):
+  - Uneven neighbouring rows cost more.
+  - The last row is justified or left part-filled, whichever is cheaper.
+  - Rows taller than the screen minus the captions (`maxH`) pay a steep
+    penalty.
+- **Thumbnails.**
+  - Capped at 2× density and upgraded only near the viewport.
+  - The first photos' `sizes` are frozen once they load.
+  - Lazy images are `display: none` until the rows are laid out
+    (`.is-justified`), so slow connections don't fetch them twice. A 3 s
+    `layout-timeout` class and `layout-failed` are the fail-safes.
+- **Rotation and resize** keep the centred photo in place.
+- **Safe areas.** The header, sections and footer use
+  `--page-gutter-l` and `--page-gutter-r`.
+- **Fonts.** Latin and Latin Extended subsets of Geist and Geist Mono, split
+  by `unicode-range`. Only Latin is preloaded.
 
 ### 4.3 F3: viewer (`assets/js/viewer.js`)
 
 - **Layout.** The fit is computed from the dialog's own size and the bars
-  float. Short screens get overlay controls with small translucent backings
-  and the details in a side column.
+  float. The details reserve is measured in a detached clone.
+  - Phones: a compact exposure line ("210mm · f/8 · 1/320s · ISO 160").
+  - Short screens: overlay controls on dark glass, shown only when they
+    actually overlap the photo, with the details in a side column.
 - **Touch layer**, listening on the whole dialog with `touch-action: none`:
   - A tap toggles the controls and never closes the viewer.
-  - Double-tap zooms, with no flicker.
+  - Double-tap zooms.
   - Pinch zoom is the viewer's own.
-  - A sideways swipe slides the neighbouring photo in alongside.
-  - A swipe down fades the background, using the `::before` layer and
-    `--fade`.
-- **Gutter.** The page drops its scrollbar gutter while the viewer is open,
-  with the gallery's width frozen, so the viewer gets the whole window.
-- **Checks.** `tools/dev/viewer-check.mjs` has about 40 assertions, all
-  passing.
+  - A sideways swipe slides the neighbouring photo in.
+  - A swipe down fades the background.
+- **Mouse.** Drag-to-pan when zoomed, with pointer capture and a grab
+  cursor; a drag never zooms out. The wheel pans.
+- **Robustness.**
+  - A failed load keeps the preview: AVIF first, then the JPEG.
+  - `show()` hides any half-slid neighbour.
+  - The source tile is hidden during the open and close animations.
+- **Shared links.** The head script, above the stylesheet, preloads
+  `viewer.js` at high priority. A `deep-link` cover paints the viewer
+  background until it opens.
+- **Checks.** `tools/dev/viewer-check.mjs` has 43 assertions, all passing.
 
 ## 5. Next steps, in order
 
-1. Record the results of F1 attempt 4, F2 attempt 4 and F3 attempt 3. F1 and
-   F2 are then finished: keep their best-scoring commits. F3 has one attempt
-   left.
-2. Final-build review of the whole site, then update `README.md` and this
-   file.
+1. Record F3 attempt 4 (its last).
+2. Final-build review of the whole site (up to 4 attempts), then update
+   `README.md` and this file.
 
 ## 6. Working on this repo
 
@@ -170,25 +192,27 @@ npx http-server -p 8123 -c-1 -s . &           # serve
 ```
 
 **Dev checks** live in `tools/dev/`. They use Playwright with Chromium at
-`/opt/pw-browsers/chromium`. For ESM imports, symlink the global `playwright`
-into a local `node_modules`, or `npm i -D playwright`.
+`/opt/pw-browsers/chromium`. For ESM imports, run them from a folder with a
+`node_modules/playwright` symlink to the global install (ESM ignores
+`NODE_PATH`), or `npm i -D playwright`.
 
 | Script | What it checks |
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs` | 30 pass/fail viewer assertions (close paths, rotation, landscape phone, zoom, races, touch, reduced motion) |
+| `viewer-check.mjs [url]` | 43 pass/fail viewer assertions (close paths, rotation, landscape phone, zoom, drag, races, touch, failed loads, reduced motion) |
 | `anchor-check.mjs` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [url] [--throttle]` | image requests per device and size, including a rotation step; flags wasted, aborted, soft or oversized files |
 | `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |
-| `npm test` | 20 unit and integration tests for the build |
+| `npm test` | 32 unit and integration tests for the build |
 
 **Build edge cases to re-test after F1 changes:**
 - A Lightroom XMP file containing `&amp;` and `&#xA;`.
 - A PNG with alpha.
 - `DSC_1234.jpg`.
 - A `.HEIC` file.
-- A truncated JPEG: expect exit 1 and nothing changed.
+- Truncated and mid-damaged JPEGs, including ones larger than 4000 px: expect exit 1, nothing encoded and nothing changed.
+- A 16-bit TIFF or PNG with a profile: colours must match the 8-bit export.
 - An empty `photos/`: the build must refuse.
 - Renaming `32-x.jpg` to `03-x.jpg`: text kept, nothing re-encoded.
 - `"-"` and `exif: false` overrides.
@@ -211,9 +235,10 @@ site.json              owner details + privacy ("show") -> build:meta|brand|abou
 assets/js/page.js      theme, row engine, resize, S/M/L; inlined after the gallery by the build
 assets/js/viewer.js    the viewer (deferred; starts from window.Portfolio)
 tools/package.mjs      copies index.html + assets/ to dist/ (+ _headers)
+tools/check-site.mjs   CI gate: index.html up to date + every referenced file exists
 .github/workflows/pages.yml  publishes only index.html + assets/ to GitHub Pages
 assets/gallery/        generated AVIF+JPEG: <slug>-<hash(source+settings)>-<width>.<ext>
-assets/fonts/          Geist + Geist Mono (OFL)
+assets/fonts/          Geist + Geist Mono, latin + latin-ext (OFL)
 photos/                originals (git-ignored), details.json + README.txt (tracked)
 tools/build.mjs        the pipeline (see header comment for safety rules)
 tools/dev/             sample generator + browser checks
