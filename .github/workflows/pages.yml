@@ -1,0 +1,39 @@
+# Publishes the website to GitHub Pages whenever the main branch changes.
+# Only index.html and assets/ are published (not photos/, site.json, tools/…).
+# One-time setup: repository Settings → Pages → Source: "GitHub Actions".
+name: Publish website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect the website files
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r assets _site/
+          find _site -name '*.tmp*' -delete
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

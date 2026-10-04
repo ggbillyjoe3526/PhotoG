@@ -18,11 +18,12 @@ own computer to prepare the photos; the published site doesn't use it.
 
 ```bash
 npm install          # once
-npm run build        # after adding or changing photos
+npm run build        # after adding or changing photos or site.json
 npm run preview      # view the site at http://localhost:8080
 ```
 
-You can also open `index.html` straight from the folder.
+You can also open `index.html` straight from the folder. `npm run build:force`
+re-encodes every photo; `npm test` checks the build's own logic.
 
 ## 1. Add your photographs
 
@@ -37,24 +38,40 @@ The build makes resized AVIF and JPEG copies in `assets/gallery/` and writes
 the gallery into `index.html`. Photos that haven't changed are skipped, and so
 are photos you've only renamed, so rebuilds are quick.
 
-**The build is careful with your site.** If any photo can't be read (for
-example, a file that didn't finish copying), it stops and changes nothing. An
-empty `photos/` folder never empties a published gallery. It only ever deletes
-files it created itself. RAW and HEIC files are skipped with a warning; export
-them as JPEG or TIFF first.
+**The build is careful with your site.**
+- If any photo can't be read, it stops and the website stays as it was. That
+  covers a damaged file or one that didn't finish copying, and it tells you
+  which file and why in plain words.
+- An empty `photos/` folder never empties a published gallery.
+- It only ever deletes files it created itself.
+- Two photos whose names clash after the numbers are removed (`03-dunes.jpg`
+  and `07-dunes.jpg`) stop the build until you rename one, so their links and
+  text can't get mixed up.
+- RAW and HEIC files are skipped with a note: export them as JPEG or TIFF
+  first.
+- Folders inside `photos/` are ignored, also with a note.
+- At the end it lists any photos that left the gallery.
 
 **Order.** Photos appear in file-name order. To set the order, start the names
 with numbers: `01-harbour.jpg`, `02-dunes.jpg`… The number isn't shown on the
 site and isn't part of the photo's link.
 
 **Hide a photo without deleting it.** Start its file name with an underscore,
-for example `_maybe-later.jpg`.
+for example `_maybe-later.jpg`. Names cameras give their files, such as
+`_DSC1234.jpg`, aren't hidden. Every build lists what it hid.
 
-**Privacy.** The resized copies have all metadata removed, including GPS
-location, camera serial numbers and edit history. Only your Artist and
-Copyright fields are kept, along with an sRGB colour profile. Your originals in
-`photos/` stay on your computer: git ignores them (see `.gitignore`), so they
-are never committed or published. Keep your own backup of them.
+**Privacy.**
+- **Image files.** The resized copies have all metadata removed, including GPS
+  location, camera serial numbers and edit history. Only your Artist and
+  Copyright fields are kept, along with an sRGB colour profile.
+- **What the page shows.** The page shows location and date text from your
+  photos' metadata. By default that's the city and the month (for example
+  "Lisbon, Portugal · June 2024"), never the street or the exact day. You can
+  change this with `"show"` in `site.json` (see section 3), and hide it for
+  single photos in `photos/details.json`.
+- **Your originals.** They stay on your computer: git ignores `photos/` (see
+  `.gitignore`), so they're never committed or published. Keep your own backup
+  of them.
 
 ## 2. Titles, captions and locations
 
@@ -64,8 +81,8 @@ The build reads the metadata your editing software already writes:
 | --- | --- |
 | Title | Title (Lightroom: *Title*; IPTC Object Name). If empty, the file name is used: `02-fog-line.jpg` becomes "Fog line" |
 | Caption | Caption / Description |
-| Location | IPTC Sublocation, City, State, Country |
-| Date | Date taken (EXIF) |
+| Location | IPTC City, State, Country (plus Sublocation if `"show"` allows it) |
+| Date | Date taken (EXIF), as the month by default |
 | Camera data | Camera, lens, focal length, aperture, shutter speed, ISO (EXIF) |
 | Alt text (for screen readers) | IPTC *Alt Text (Accessibility)*, or the caption, or the title |
 
@@ -88,10 +105,14 @@ sensitive location. Then run `npm run build` again:
 }
 ```
 
-- `camera` and `lens` can be filled in by hand, which is useful for film scans.
-- `"exif": false` hides all camera data for one photo.
+- Camera data can be typed too: `camera`, `lens`, `focal`, `aperture`,
+  `shutter` and `iso`. Any of them can be `"-"` to hide it.
+- `"exif": false` ignores everything the file says about the camera. Use it
+  for film scans, where the file describes the scanner, and type the real
+  camera and lens instead.
 - `"_cover": "horizon"` at the top of the file picks the image that appears
-  when someone shares your site's link. The default is the first photo.
+  when someone shares your site's link. The default is the first landscape
+  photo.
 
 At the end of every build you'll see a list of photos that have no description
 for screen readers, so you know which ones still need an `alt`.
@@ -120,7 +141,9 @@ between the quotes, then run `npm run build`:
 }
 ```
 
-- **name** appears in the header, the browser tab, search results and the footer.
+- **name** appears in the header, the browser tab, search results and the
+  footer. **title** follows it in the browser tab ("Ana Ferreira —
+  Photography"). **language** is the page's language code ("en", "pt-PT"…).
 - **description** is the one-line summary shown by search engines and in link
   previews.
 - **url** is your site's address. Leave it `""` until the site is live. Once
@@ -129,6 +152,10 @@ between the quotes, then run `npm run build`:
 - **facts** and **links** are lists of `"Label": "value"` pairs. Add, remove or
   rename them freely. Links must start with `https://`.
 - Leave **email** `""` to show only the links.
+- **show** sets how much location and date text from your photos' metadata
+  the page shows. `"location"` can be `"full"` (including street or place),
+  `"city"`, `"country"` or `"none"`. `"date"` can be `"day"`, `"month"`,
+  `"year"` or `"none"`. The default is `{ "location": "city", "date": "month" }`.
 
 The build checks the file and tells you about anything it had to leave out,
 such as a link that doesn't start with `https://`. It also reminds you while
@@ -139,18 +166,24 @@ The page layout itself is `index.html`. Don't edit inside the
 
 ## 4. Publish
 
-The website is `index.html` plus the `assets/` folder; nothing else is needed
-on the server. Your originals in `photos/` aren't part of the website.
+The website is `index.html` plus the `assets/` folder; nothing else belongs on
+the server. Your originals, `site.json`, `photos/details.json` and the tools are
+not part of the website.
 
-- **GitHub Pages:** push to GitHub, then *Settings → Pages → Deploy from a
-  branch* and choose your branch and `/ (root)`.
-- **Netlify / Cloudflare Pages / Vercel:** connect the repository, leave the
-  build command empty and set the publish directory to `/`.
-- **Any web host or drag-and-drop host:** upload `index.html` and the
-  `assets/` folder only. Don't upload the `photos/` folder.
+- **GitHub Pages (recommended):** push the repository to GitHub. Then choose
+  *Settings → Pages → Source: GitHub Actions* once. The included workflow
+  (`.github/workflows/pages.yml`) publishes `index.html` and `assets/` every
+  time the main branch changes. Don't use "Deploy from a branch": that would
+  publish every file in the repository.
+- **Netlify / Cloudflare Pages:** connect the repository and set the build
+  command to `npm run package` and the publish directory to `dist`. The
+  command copies just the website into `dist/`, plus a `_headers` file that
+  lets browsers cache images and fonts for a long time.
+- **Any other web host:** run `npm run package` and upload the contents of
+  `dist/`.
 
-Image file names include a content hash (`horizon-1a2b3c4d-1600.avif`), so you
-can let browsers cache `assets/gallery/` for a long time.
+Image file names include a content hash (`horizon-1a2b3c4d-1600.avif`), so
+long-term caching is safe: a changed photo always gets a new name.
 
 ---
 
@@ -161,9 +194,14 @@ can let browsers cache `assets/gallery/` for a long time.
   medium or large thumbnails, and the site remembers their choice.
 - **A full-screen viewer** with the title, location, date and camera settings.
   - Keyboard: ← → to move between photos, Home and End to jump to the first or
-    last, **I** to show or hide details, Esc to close.
-  - Touch: swipe sideways to change photo, swipe down to close, and tap the
-    photo to hide the controls. Pinch-zoom works too.
+    last, **I** to show or hide details, **Z** to zoom, Esc to close.
+  - Zoom: click the photo (or press Z, or use the magnifier button) to see it
+    at full resolution, then move the pointer, drag or use the arrow keys to
+    look around.
+  - Touch: swipe sideways to change photo, swipe down to close, tap the photo
+    to hide the controls, and double-tap to zoom. Pinch-zoom works too.
+  - On a phone held sideways, the photo fills the screen height and the
+    details sit beside it.
   - Every photo has its own shareable link (`yoursite.com/#photo-horizon`), and
     the browser's Back button closes the viewer.
 - **Fast loading.** Each screen gets an AVIF image at the right size, with a
@@ -179,14 +217,15 @@ can let browsers cache `assets/gallery/` for a long time.
 ## Project layout
 
 ```
-site.json             your name, bio and contact details
+site.json             your name, bio, contact details and privacy choices
 index.html            the page layout (build:… regions are generated)
 assets/css/style.css  all styling; colours are tokens at the top
-assets/js/layout.js   gallery rows (inlined into index.html by the build)
-assets/js/main.js     theme, thumbnail size, viewer
+assets/js/page.js     theme, gallery rows, S/M/L (inlined into index.html by the build)
+assets/js/viewer.js   the full-screen viewer
 assets/fonts/         Geist and Geist Mono (SIL Open Font License, see OFL.txt)
 assets/gallery/       generated by the build (don't edit or add files here)
 photos/               your originals (kept private) + details.json
-tools/build.mjs       the build (photos + site.json -> index.html)
+tools/build.mjs       the build (photos + site.json -> index.html); tests in build.test.mjs
+tools/package.mjs     copies the website into dist/ for publishing
 tools/dev/            development checks (not needed to run the site)
 ```

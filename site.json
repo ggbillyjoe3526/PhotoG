@@ -3,12 +3,21 @@
     "Your details for the website. Edit the text between the quotes, then run `npm run build`.",
     "Leave \"url\" empty until the site is live, then set it (e.g. \"https://yourname.com/\") so link previews show your photo.",
     "\"facts\" and \"links\" are lists of \"Label\": \"value\" pairs: add, remove or rename them freely.",
-    "Leave \"email\" empty to show only the links."
+    "Leave \"email\" empty to show only the links.",
+    "\"show\" sets how much location and date text from your photos' metadata the page shows:",
+    "  location: \"full\" (incl. street/place), \"city\", \"country\" or \"none\"; date: \"day\", \"month\", \"year\" or \"none\".",
+    "\"title\" follows your name in the browser tab (\"Your Name — Photography\"); \"language\" is the page's language code."
   ],
   "name": "Your Name",
+  "title": "Photography",
   "tagline": "Photographer · Landscape & Architecture",
   "description": "Landscape and architectural photography by Your Name.",
   "url": "",
+  "language": "en",
+  "show": {
+    "location": "city",
+    "date": "month"
+  },
   "about": {
     "lede": "Your Name is a photographer working with landscape, light and the quiet geometry of built places.",
     "text": [

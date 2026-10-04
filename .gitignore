@@ -1,4 +1,5 @@
 node_modules/
+dist/
 
 # Your original photos stay on your computer: they are full size and can carry
 # GPS location and other private metadata. Only the stripped, resized copies in
@@ -11,4 +12,5 @@ photos/*
 .DS_Store
 Thumbs.db
 *.log
+*.tmp
 *.tmp-*

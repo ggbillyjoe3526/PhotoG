@@ -2,18 +2,21 @@
   "name": "photog",
   "version": "1.0.0",
   "private": true,
-  "description": "A minimal, technical photography portfolio. Drop photos in /photos and run `npm run build`.",
+  "description": "A minimal, technical photography portfolio. Put photos in photos/, your details in site.json, and run npm run build.",
   "type": "module",
   "scripts": {
     "build": "node tools/build.mjs",
     "build:force": "node tools/build.mjs --force",
-    "preview": "npx --yes http-server -c-1 -p 8080 ."
+    "test": "node --test tools/build.test.mjs",
+    "package": "node tools/package.mjs",
+    "preview": "http-server -c-1 -p 8080 ."
   },
   "engines": {
     "node": ">=20.9"
   },
   "devDependencies": {
     "exifr": "^7.1.3",
+    "http-server": "^14.1.1",
     "sharp": "^0.35.5"
   }
 }
