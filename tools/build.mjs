@@ -1437,8 +1437,8 @@ async function build(notes, started) {
 
   html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
   const fingerprint = sourceFingerprint(await Promise.all(FINGERPRINT_FILES.map((f) => readFile(path.join(ROOT, f), 'utf8').catch(() => ''))));
-  html = replaceRegion(html, 'meta', renderMeta(site, cover, photos) +
-    `\n    <!-- sources: ${fingerprint} (site.json, photos/details.json, page.js as last built; checked before publishing) -->`);
+  html = replaceRegion(html, 'meta', `${renderMeta(site, cover, photos).trimEnd()}\n` +
+    `    <!-- sources: ${fingerprint} (site.json, photos/details.json, page.js as last built; checked before publishing) -->\n    `);
   html = replaceRegion(html, 'brand', renderBrand(site));
   html = replaceRegion(html, 'stats', renderStats(photos));
   html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));

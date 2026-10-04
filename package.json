@@ -8,7 +8,7 @@
     "build": "node tools/build.mjs",
     "build:force": "node tools/build.mjs --force",
     "test": "node --test tools/build.test.mjs tools/build.integration.test.mjs",
-    "package": "node tools/package.mjs",
+    "package": "node tools/check-site.mjs && node tools/package.mjs",
     "preview": "http-server -c-1 -p 8080 ."
   },
   "engines": {

@@ -2,8 +2,10 @@
 /**
  * Copy just the website (index.html + assets/) into dist/, for hosts where
  * you choose a folder to publish (Netlify, Cloudflare Pages, any web host).
- * Also writes dist/_headers so hosts that read it cache images and fonts
- * for a long time (their file names change whenever they change).
+ * Also writes dist/_headers for hosts that read it: generated images are
+ * cached for good (their names change whenever they change), fonts for a
+ * week. `npm run package` first runs tools/check-site.mjs, so a page that
+ * wasn't rebuilt after an edit is never published.
  *   npm run package
  */
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
