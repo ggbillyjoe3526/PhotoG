@@ -24,7 +24,7 @@ await writeFile(path.join(DIST, '_headers'), [
   '/assets/gallery/*',
   '  Cache-Control: public, max-age=31536000, immutable',
   '/assets/fonts/*',
-  '  Cache-Control: public, max-age=31536000, immutable',
+  '  Cache-Control: public, max-age=604800', // a week: font names don't change
   '',
 ].join('\n'));
 console.log('Website copied to dist/ (index.html, assets/). Publish that folder.');

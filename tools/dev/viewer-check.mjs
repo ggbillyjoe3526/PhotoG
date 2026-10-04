@@ -77,7 +77,7 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   const share = (s.frame.w * s.frame.h) / (s.vw * s.vh);
   check('landscape phone 3:2 photo fills the height', s.frame.h >= s.vh - 2, `${Math.round(s.frame.w)}x${Math.round(s.frame.h)}, ${Math.round(share * 100)}% of screen`);
   await page.tap('.viewer-frame');
-  await settle(page, 500);
+  await settle(page, 900); // a tap waits 260ms (could be a double-tap), then fades
   const s2 = await state(page);
   const vis = await page.evaluate(() => getComputedStyle(document.querySelector('.viewer-top')).visibility);
   check('tap → immersive: controls hidden (visibility)', s2.cls.includes('is-immersive') && vis === 'hidden');
@@ -88,7 +88,7 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   await page.goto(base + '#photo-panorama', { waitUntil: 'networkidle' });
   await settle(page);
   const p1 = await state(page);
-  await page.tap('.viewer-frame'); await settle(page, 500);
+  await page.tap('.viewer-frame'); await settle(page, 900);
   const p2 = await state(page);
   check('landscape phone panorama grows in immersive', p2.frame.w > p1.frame.w, `${Math.round(p1.frame.w)} → ${Math.round(p2.frame.w)}`);
   await ctx.close();
@@ -184,7 +184,84 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   await ctx.close();
 }
 
-// 7. Reduced motion: opens and closes without animations.
+// 7. Touch details: taps never close, side arrows work by touch, pinch,
+//    the neighbour slides in, pulling down fades the background.
+{
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+  await page.goto(base + '#photo-ridgelines', { waitUntil: 'networkidle' });
+  await settle(page, 600);
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
+  const tap = async (x, y) => { await touch('touchStart', [{ x, y }]); await touch('touchEnd', []); };
+  // tap the empty area above the photo twice: hides then shows controls, never closes
+  await tap(195, 150); await settle(page, 900);
+  let s = await state(page);
+  const hidden = s.cls.includes('is-immersive');
+  await tap(195, 150); await settle(page, 900);
+  s = await state(page);
+  check('touch: tapping outside the photo toggles the controls and never closes', s.open && hidden && !s.cls.includes('is-immersive'), s.cls);
+  // pinch out, then back in
+  const f = s.frame; const cx = f.x + f.w / 2; const cy = f.y + f.h / 2;
+  await touch('touchStart', [{ x: cx - 30, y: cy, id: 1 }, { x: cx + 30, y: cy, id: 2 }]);
+  for (let i = 1; i <= 8; i++) await touch('touchMove', [{ x: cx - 30 - i * 12, y: cy, id: 1 }, { x: cx + 30 + i * 12, y: cy, id: 2 }]);
+  await touch('touchEnd', []); await settle(page, 500);
+  s = await state(page);
+  const scaleOut = await page.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector('.viewer-frame')).transform).a);
+  check('touch: pinch out zooms in (controls stay normal size)', s.cls.includes('is-zoomed') && scaleOut > 1.5, `scale ${scaleOut.toFixed(2)}`);
+  await touch('touchStart', [{ x: cx - 130, y: cy, id: 1 }, { x: cx + 130, y: cy, id: 2 }]);
+  for (let i = 1; i <= 8; i++) await touch('touchMove', [{ x: cx - 130 + i * 14, y: cy, id: 1 }, { x: cx + 130 - i * 14, y: cy, id: 2 }]);
+  await touch('touchEnd', []); await settle(page, 600);
+  check('touch: pinch in zooms back out', !(await state(page)).cls.includes('is-zoomed'));
+  // mid-swipe: the neighbour is visible beside the photo
+  await touch('touchStart', [{ x: 300, y: 420 }]);
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [{ x: 300 - i * 25, y: 422 }]);
+  const peek = await page.evaluate(() => { const p = document.querySelector('.viewer-peek'); const r = p.getBoundingClientRect(); return { hidden: p.hidden, left: Math.round(r.left), w: Math.round(r.width) }; });
+  await touch('touchEnd', []); await settle(page, 700);
+  check('touch: during a swipe the next photo slides in alongside', !peek.hidden && peek.left < 390 && peek.w > 0, JSON.stringify(peek));
+  check('touch: the swipe lands on the next photo', (await state(page)).idx === '02');
+  // pull down part-way: background fades; release early: springs back
+  await touch('touchStart', [{ x: 200, y: 300 }]);
+  for (let i = 1; i <= 5; i++) { await touch('touchMove', [{ x: 200, y: 300 + i * 16 }]); await page.waitForTimeout(70); } // slowly: not a flick
+  const fade = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.viewer'), '::before').opacity));
+  await touch('touchEnd', []); await settle(page, 600);
+  s = await state(page);
+  check('touch: pulling down fades the background; a short pull springs back', fade < 0.95 && s.open && !s.cls.includes('is-pulling'), `opacity ${fade}`);
+  await ctx.close();
+}
+{
+  // Touchscreen laptop: fine pointer (side arrows shown) plus touch.
+  const { ctx, page } = await newPage({ viewport: { width: 1440, height: 900 }, hasTouch: true });
+  await page.goto(base + '#photo-dunes', { waitUntil: 'networkidle' });
+  await settle(page, 500);
+  // Emulation reports a coarse pointer here, so show the arrows as a
+  // touchscreen laptop (fine pointer + touch) would.
+  await page.addStyleTag({ content: '.viewer { --side: 84px !important; } .viewer-side { display: grid !important; }' });
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+  await page.setViewportSize({ width: 1439, height: 900 }); await settle(page, 300);
+  await page.tap('.viewer-side.next'); await settle(page, 500);
+  check('touch tap on a side arrow moves to the next photo', (await state(page)).idx === '05');
+  // I is ignored while zoomed
+  await page.keyboard.press('z'); await settle(page, 400);
+  const before = await page.evaluate(() => document.querySelector('.viewer').classList.contains('is-info-hidden'));
+  await page.keyboard.press('i'); await settle(page, 200);
+  const after = await page.evaluate(() => document.querySelector('.viewer').classList.contains('is-info-hidden'));
+  check('I does nothing while zoomed', before === after);
+  await ctx.close();
+}
+{
+  // Forward reopens the viewer; closing then steps back (no dead entry).
+  const { ctx, page } = await newPage();
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.click('#photo-pines .tile-link'); await settle(page);
+  await page.goBack(); await settle(page, 700);
+  await page.goForward(); await settle(page, 700);
+  await page.keyboard.press('Escape'); await settle(page, 800);
+  const st = await page.evaluate(() => ({ open: document.querySelector('dialog').open, state: history.state, hash: location.hash }));
+  check('closing after Forward leaves no extra history entry', !st.open && !st.state && st.hash === '', JSON.stringify(st));
+  await ctx.close();
+}
+
+// 8. Reduced motion: opens and closes without animations.
 {
   const { ctx, page } = await newPage({ reducedMotion: 'reduce' });
   await page.goto(base, { waitUntil: 'networkidle' });

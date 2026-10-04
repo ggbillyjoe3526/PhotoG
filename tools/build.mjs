@@ -32,7 +32,8 @@ import sharp from 'sharp';
 
 /* ------------------------------------------------------------------ config */
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// PHOTOG_ROOT lets the integration tests build a throwaway copy of the site.
+const ROOT = process.env.PHOTOG_ROOT ? path.resolve(process.env.PHOTOG_ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_DIR = path.join(ROOT, 'photos');
 const OUT_DIR = path.join(ROOT, 'assets', 'gallery');
 const OUT_URL = 'assets/gallery';
@@ -45,21 +46,26 @@ const CACHE_FILE = path.join(SRC_DIR, '.build-cache.json');
 /** Image encoding. Changing anything here re-encodes every photo and gives
  *  the files new names, so browsers never keep serving old versions. */
 const ENCODE = {
-  widths: [320, 480, 640, 800, 1000, 1200, 1600, 2400, 3200],
+  widths: [320, 480, 640, 800, 1000, 1200, 1600, 2000, 2400, 3200],
   maxLongEdge: 3200, // px; also caps tall portraits
   jpeg: { quality: 82, mozjpeg: true },
   avif: { quality: 58, effort: 4 },
+  avifLarge: { quality: 64, effort: 4, from: 1600 }, // viewer sizes keep grain and fine detail
   density: 72,
-  revision: 3,
+  revision: 4,
 };
+const PIXEL_LIMIT = 1_000_000_000; // sharp's default (268 MP) is too small for big stitched panoramas
 
 /** Markup only (no re-encode). */
 const MARKUP = {
-  eager: 4, // first N photos load immediately, the rest lazily
+  // The first N photos load at once (the browser fetches them before any
+  // script runs, using estimated sizes); the rest are lazy and get their
+  // exact size from page.js first, which is inlined right after the gallery.
+  eager: 2,
 };
 
 const REGIONS = ['meta', 'brand', 'stats', 'gallery', 'about', 'contact', 'footer'];
-const INPUT_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.tif', '.tiff']);
+const INPUT_EXT = new Set(['.jpg', '.jpeg', '.jfif', '.png', '.webp', '.avif', '.tif', '.tiff']);
 const UNSUPPORTED_EXT = new Set([
   '.heic', '.heif', '.dng', '.nef', '.nrw', '.cr2', '.cr3', '.crw', '.arw', '.srf', '.sr2', '.raf', '.orf',
   '.rw2', '.pef', '.srw', '.x3f', '.3fr', '.fff', '.iiq', '.erf', '.mef', '.mos', '.psd', '.psb', '.gif', '.bmp',
@@ -69,6 +75,7 @@ const EXIF_KEYS = ['camera', 'lens', 'focal', 'aperture', 'shutter', 'iso'];
 const GENERATED_FILE = /^[a-z0-9-]+-[0-9a-f]{8}-\d+\.(?:avif|jpg)(?:\.tmp)?$/;
 const KNOWN_FLAGS = new Set(['--force', '--allow-empty', '--help', '-h']);
 const SHOW_DEFAULTS = { location: 'city', date: 'month' };
+const SITE_KEYS = ['_help', 'name', 'title', 'tagline', 'description', 'url', 'language', 'show', 'about', 'contact', 'licensing'];
 const SHOW_CHOICES = { location: ['full', 'city', 'country', 'none'], date: ['day', 'month', 'year', 'none'] };
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -168,8 +175,9 @@ function round(value, digits = 1) {
   return Math.round(value * f) / f;
 }
 
-/** Names cameras give files: DSC_1234, _DSC1234, IMG_1234, _MG_1234, PXL_… */
-const CAMERA_NAME = /^(?:_?dsc[fn]?|_?dsf|_?mg_?|_?img|imgp|pxl|mvimg|gopr|dji|p\d{3}|r\d{3}|_?[a-z]\d{3})[\s._-]*\d{3,}/i;
+/** Names cameras give files: DSC_1234, _DSC1234, IMG_1234, _MG_1234, _IGP0042,
+ *  P1000123, PXL_… (the DCF rule is four characters then four digits). */
+const CAMERA_NAME = /^(?:_?dsc[fn]?|_?dsf|_?mg_?|_?img|imgp|pxl|mvimg|gopr|dji|p\d{3}|r\d{3}|_?[a-z]\d{3})[\s._-]*\d{3,}|^[a-z0-9_]{4}\d{4}(?:[\s._-]|$)/i;
 
 /** A leading "_" hides a photo, except on camera names such as _DSC1234. */
 export function isHiddenFile(fileName) {
@@ -254,6 +262,22 @@ function dateParts(value) {
   return iso ? { y: +iso[1], m: +iso[2], d: +iso[3] } : null;
 }
 
+/** Typed camera values as the page shows them: "35" → "35mm", "5.6" → "f/5.6",
+ *  "125" → "1/125s", "400" → "ISO 400". Anything else is kept as typed. */
+export function normaliseTyped(key, value) {
+  if (!value) return '';
+  const n = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
+  if (key === 'focal' && n > 0) return `${round(n, 0)}mm`;
+  if (key === 'aperture') return n > 0 ? `f/${round(n)}` : value.replace(/^f\s*/i, 'f/').replace(/^f\/\//, 'f/');
+  if (key === 'shutter') {
+    if (/^1\/\d+$/.test(value)) return `${value}s`;
+    if (n >= 2 && Number.isInteger(n)) return `1/${n}s`; // photographers say "125" for 1/125
+    if (n > 0) return `${n}s`;
+  }
+  if (key === 'iso' && n > 0) return `ISO ${round(n, 0)}`;
+  return value;
+}
+
 /** Format a capture date at the chosen level: day | month | year | none. */
 export function formatDate(value, level = 'day') {
   const p = dateParts(value);
@@ -265,12 +289,18 @@ export function formatDate(value, level = 'day') {
 
 /** Turn library errors into something a photographer can act on. */
 export function explainError(err) {
-  const msg = String(err && err.message || err);
+  // libvips can repeat a line many times; keep each once.
+  const msg = [...new Set(String(err && err.message || err).split('\n').map((l) => l.trim()).filter(Boolean))].join(' ');
+  if (/input (buffer|file) is empty|empty file/i.test(msg)) return 'is empty (0 bytes). Copy or export it again.';
+  if (/ENOSPC/.test(msg)) return "couldn't be saved: the disk is full. Free some space and run again.";
+  if (/EISDIR/.test(msg)) return "couldn't be saved: a folder is in the way of a file the build writes.";
+  if (/EPERM|EACCES|EBUSY/.test(msg)) return "couldn't be read or saved (permission denied or the file is in use, e.g. by a sync app or antivirus). Try again.";
+  if (/pixel limit|exceeds pixel/i.test(msg)) return 'is too large to process (over a billion pixels). Export a smaller version.';
   if (/unsupported image format|not a known file format|unknown format/i.test(msg)) return "isn't an image file the build can read. Export it as JPEG or TIFF.";
   if (/corrupt|bad huffman|damaged|invalid/i.test(msg)) return `is damaged and can't be read reliably. Export it again. (${msg.replace(/\s+/g, ' ').trim()})`;
   if (/premature end of (jpeg )?(image|file)|truncated|unexpected end/i.test(msg)) return 'is incomplete: the file was cut off (for example an unfinished copy or download). Copy or export it again.';
   if (/marker|vipsjpeg|tiff|png|webp|heif|premature end/i.test(msg)) return `is damaged and can't be read reliably. Export it again. (${msg.replace(/\s+/g, ' ').trim()})`;
-  if (/EACCES|EPERM/i.test(msg)) return "can't be read (no permission). Check the file's permissions.";
+  if (/warning treated as error/i.test(msg)) return "is damaged or incomplete and can't be read reliably. Export it again.";
   return msg;
 }
 
@@ -304,16 +334,51 @@ export async function readJson(file, fallback, notes) {
       notes.push(`${path.relative(ROOT, file)} has trailing commas; they were ignored${file === DETAILS_FILE ? ' (and removed)' : ''}.`);
       return value;
     } catch {
-      throw new Error(`${path.relative(ROOT, file)} is not valid JSON: ${err.message}`);
+      throw new Error(`${path.relative(ROOT, file)} is not valid JSON: ${describeJsonError(raw, err)}`);
     }
   }
+}
+
+/** "Unexpected token…" → where it is and what is probably wrong. */
+export function describeJsonError(raw, err) {
+  const msg = String(err.message || err);
+  const lc = /line (\d+) column (\d+)/.exec(msg);
+  const pos = /position (\d+)/.exec(msg);
+  let line;
+  let col;
+  if (lc) { line = +lc[1]; col = +lc[2]; } else if (pos) {
+    const before = raw.slice(0, +pos[1]).split('\n');
+    line = before.length;
+    col = before.at(-1).length + 1;
+  }
+  if (!line) return msg;
+  const lines = raw.split('\n');
+  const prev = lines.slice(0, line - 1).reverse().find((l) => l.trim());
+  const here = (lines[line - 1] || '').trim();
+  let hint = '';
+  if (prev && /["\]}\d]\s*$/.test(prev.trim()) && /^["{[]/.test(here)) hint = ` Probably a missing comma at the end of line ${lines.lastIndexOf(prev) + 1}.`;
+  else if (/[“”]/.test(here)) hint = ' Curly quotes “ ” must be straight quotes ".';
+  else if (/^\s*'/.test(here) || /:\s*'/.test(here)) hint = " Text must be in double quotes \", not single quotes '.";
+  return `problem at line ${line}, column ${col}.${hint}`;
 }
 
 /** Write via a temp file + rename, so an interrupted build never leaves a half-written file. */
 async function writeAtomic(file, content) {
   const tmp = `${file}.tmp-${process.pid}`;
   await writeFile(tmp, content);
-  await rename(tmp, file);
+  await renameRetry(tmp, file);
+}
+
+/** rename(), retried briefly when a sync app or antivirus holds the file (Windows). */
+async function renameRetry(from, to) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rename(from, to);
+    } catch (err) {
+      if (attempt >= 4 || !/EPERM|EBUSY|EACCES/.test(err.code || '')) throw err;
+      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt));
+    }
+  }
 }
 
 async function writeIfChanged(file, content) {
@@ -398,7 +463,7 @@ export function describe(meta, o = {}, names = { title: '' }, show = SHOW_DEFAUL
   const exif = {};
   for (const key of EXIF_KEYS) {
     if (isHidden(o[key])) continue;
-    const value = text(o[key]) || fromFile[key] || '';
+    const value = normaliseTyped(key, text(o[key])) || fromFile[key] || '';
     if (value) exif[key] = value;
   }
   if (exif.focal && !text(o.focal) && fromFile.focal35) exif.focal35 = fromFile.focal35;
@@ -435,30 +500,43 @@ function rightsXmp({ artist, copyright }) {
     '</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
 }
 
-/** Harmless libjpeg warnings some cameras' files trigger; the image is fine. */
-const BENIGN_WARNING = /extraneous bytes before marker/i;
+/** Decoder warnings some cameras', phones' and scanners' files trigger while
+ *  the image itself is fine. Anything else means damage. */
+const BENIGN_WARNINGS = [/extraneous bytes before marker/i, /invalid sos parameters for sequential jpeg/i, /unknown jfif revision/i];
 
-/** Decode, orient, colour-convert and downscale ONCE into a master. */
+/**
+ * Decode, orient, colour-convert and downscale ONCE into a master. Every
+ * decoder warning is collected: a harmless quirk becomes a note, anything
+ * else (or more warnings than the harmless ones shown) stops the photo, so a
+ * damaged file is never published half grey.
+ */
 async function decodeMaster(buffer, maxWidth, notes, fileName) {
-  const run = (failOn) => sharp(buffer, { failOn })
+  const warnings = [];
+  const image = sharp(buffer, { failOn: 'none', limitInputPixels: PIXEL_LIMIT });
+  image.on('warning', (message) => warnings.push(String(message)));
+  const master = await image
     .rotate()
     .resize({ width: maxWidth, withoutEnlargement: true })
     .flatten({ background: '#ffffff' }) // transparency becomes white
     .toColourspace('srgb')
     .raw({ depth: 'uchar' })
     .toBuffer({ resolveWithObject: true });
-  try {
-    // Strict: a damaged file must not be published half-grey.
-    return await run('warning');
-  } catch (err) {
-    if (!BENIGN_WARNING.test(err.message)) throw err;
-    notes.push(`${fileName}: has a harmless quirk ("${err.message.trim()}"); it was processed normally.`);
-    return run('truncated');
+  const lines = new Set();
+  let reported = 0;
+  for (const w of warnings) {
+    const count = /read gave (\d+) warnings?/i.exec(w);
+    if (count) { reported = Math.max(reported, +count[1]); continue; }
+    for (const line of w.split('\n')) if (line.trim()) lines.add(line.trim());
   }
+  const damage = [...lines].filter((l) => !BENIGN_WARNINGS.some((re) => re.test(l)));
+  if (damage.length) throw new Error(damage.join('\n'));
+  if (reported > lines.size) throw new Error('Corrupt JPEG data: the decoder found more problems than it described');
+  if (lines.size) notes.push(`${fileName}: has a harmless quirk (${[...lines][0].replace(/^VipsJpeg:\s*/, '')}); it was processed normally.`);
+  return master;
 }
 
 async function encode(buffer, id, rights, notes, fileName) {
-  const { width, height } = orientedSize(await sharp(buffer, { failOn: 'truncated' }).metadata());
+  const { width, height } = orientedSize(await sharp(buffer, { failOn: 'truncated', limitInputPixels: PIXEL_LIMIT }).metadata());
   if (!width || !height) throw new Error('could not read the image size');
   const widths = widthLadder(width, height);
   const master = await decodeMaster(buffer, widths.at(-1), notes, fileName);
@@ -477,13 +555,16 @@ async function encode(buffer, id, rights, notes, fileName) {
       .withIccProfile('srgb')
       .withExif({ IFD0: ifd0, IFD2: { ColorSpace: '1' } }); // 1 = sRGB
     if (xmp) pipeline = pipeline.withXmp(xmp);
-    pipeline = format === 'avif' ? pipeline.avif(ENCODE.avif) : pipeline.jpeg(ENCODE.jpeg);
+    const { from, ...avifLarge } = ENCODE.avifLarge;
+    pipeline = format === 'avif' ? pipeline.avif(w >= from ? avifLarge : ENCODE.avif) : pipeline.jpeg(ENCODE.jpeg);
     const file = path.join(OUT_DIR, `${id}-${w}.${format === 'avif' ? 'avif' : 'jpg'}`);
     await pipeline.toFile(`${file}.tmp`);
-    await rename(`${file}.tmp`, file);
+    await renameRetry(`${file}.tmp`, file);
   };
   await Promise.all(widths.flatMap((w) => [write(w, 'avif'), write(w, 'jpeg')]));
-  return { width, height, widths, tint: await tintOf(fromMaster()) };
+  // The tint comes from the smallest published JPEG, so every computer that
+  // builds the site gets exactly the same colour.
+  return { width, height, widths, tint: await tintOf(sharp(path.join(OUT_DIR, `${id}-${widths[0]}.jpg`))) };
 }
 
 /** Average colour (shown while a photo loads). */
@@ -538,7 +619,7 @@ async function processPhoto(entry, cache, notes, show) {
     status = 'renamed';
   } else if (!FORCE) {
     // No record (e.g. a fresh clone), but the images may already be here.
-    const size = orientedSize(await sharp(buffer ?? sourcePath, { failOn: 'truncated' }).metadata());
+    const size = orientedSize(await sharp(buffer ?? sourcePath, { failOn: 'truncated', limitInputPixels: PIXEL_LIMIT }).metadata());
     if (size.width && size.height) {
       const widths = widthLadder(size.width, size.height);
       if (await allExist(filesFor(id, widths))) {
@@ -553,6 +634,8 @@ async function processPhoto(entry, cache, notes, show) {
   const { rights, ...fields } = text;
   return {
     ...fields,
+    artist: rights.artist,
+    copyright: rights.copyright,
     id: entry.names.slug,
     file: entry.fileName,
     width: image.width,
@@ -574,22 +657,73 @@ export function rowCss(pageJs) {
   const match = /var ROW = (\{[^}\n]*\})/.exec(pageJs);
   if (!match) throw new Error('assets/js/page.js is missing its `var ROW = { … };` line.');
   const row = Function(`return ${match[1]}`)();
-  return `clamp(${row.min}px, calc(${row.base}px + ${+(row.vw * 100).toFixed(3)}vw), ${row.max}px)`;
+  return `min(clamp(${row.min}px, calc(${row.base}px + ${+(row.vw * 100).toFixed(3)}vw), ${row.max}px), 85vh)`;
 }
 
 function srcset(photo, ext) {
   return photo.widths.map((w) => `${photo.base}-${w}.${ext} ${w}w`).join(', ');
 }
 
-function renderTile(photo, index, total, rowHeight) {
+/**
+ * `sizes` for the first (eager) photos, which browsers start fetching before
+ * any script runs: their actual width in the gallery at a range of screen
+ * widths, worked out with the page's own row layout. 3x screens get 2x
+ * files (page.js caps thumbnails at 2x too).
+ */
+function eagerSizes(photos, pageJs) {
+  const src = pageJs;
+  const start = src.indexOf('  function partition(');
+  const end = src.indexOf('  /* ---- choosing thumbnail files */');
+  if (start < 0 || end < 0 || !photos.length) return [];
+  const row = Function(`return ${/var ROW = (\{[^}\n]*\})/.exec(src)[1]}`)();
+  const partition = Function('MAX_PER_ROW', `${src.slice(start, end)}; return partition;`)(12);
+  const ratios = photos.map((p) => p.width / p.height);
+  // Screen widths up to which each estimate applies (CSS px). Within each
+  // range the layout is sampled every 40px and the widest result is used, so
+  // the photo is never soft and rarely more than a step too large.
+  const steps = [];
+  for (let vw = 420; vw <= 1260; vw += 60) steps.push(vw);
+  steps.push(1400, 1600, 1800, 2000, 2300, 2600);
+  const at = (vw) => {
+    const gutter = Math.max(Math.min(48, Math.max(16, vw * 0.032)), (vw - 2200) / 2);
+    const width = vw - 2 * gutter - 1;
+    const gap = Math.min(12, Math.max(6, vw * 0.0075));
+    const vh = vw <= 599 ? 844 : vw <= 1024 ? 1180 : 900; // typical screen heights
+    const target = Math.min(Math.max(row.min, Math.min(row.max, row.base + row.vw * width)), (vh - 40) * 0.9);
+    const widths = new Array(per.length).fill(0);
+    for (const r of partition(ratios, width, gap, target, vw <= 599 ? 64 : 80)) {
+      for (let k = r.start; k < r.end && k < per.length; k++) widths[k] = Math.ceil(ratios[k] * r.height);
+    }
+    return widths;
+  };
+  const per = photos.slice(0, MARKUP.eager).map(() => []);
+  let from = 320;
+  for (const upTo of steps) {
+    const widest = new Array(per.length).fill(0);
+    for (let vw = from; vw <= upTo; vw += 40) at(vw).forEach((w, k) => { widest[k] = Math.max(widest[k], w); });
+    at(upTo).forEach((w, k) => { widest[k] = Math.max(widest[k], w); });
+    widest.forEach((w, k) => per[k].push([upTo, w]));
+    from = upTo + 1;
+  }
+  return per.map((list) => {
+    const parts = [];
+    list.forEach(([vw, w], i) => {
+      const query = i === list.length - 1 ? '' : `(max-width: ${vw}px)`;
+      parts.push(`(min-resolution: 2.5dppx)${query ? ` and ${query}` : ''} ${Math.ceil(w * 2 / 3)}px`);
+    });
+    list.forEach(([vw, w], i) => parts.push(i === list.length - 1 ? `${w}px` : `(max-width: ${vw}px) ${w}px`));
+    return parts.join(', ');
+  });
+}
+
+function renderTile(photo, index, total, rowHeight, eagerSize) {
   const ar = photo.width / photo.height;
   const eager = index < MARKUP.eager;
   const number = String(index + 1).padStart(Math.max(2, String(total).length), '0');
-  // A close first guess at the rendered width (aspect ratio x a typical row
-  // height). page.js, inlined after the gallery, gives every image that
-  // hasn't started loading its exact width before the first paint; this
-  // guess is only used by the first few (eager) photos and without JS.
-  const sizes = `min(100vw, calc(${round(ar * 1.1, 3)} * ${rowHeight}))`;
+  // Eager photos: their width at each screen size (see eagerSizes). Lazy ones:
+  // a close guess that page.js, inlined after the gallery, replaces with the
+  // exact width before any of them starts loading (it's what no-JS uses).
+  const sizes = eager && eagerSize ? eagerSize : `min(100vw, calc(${round(ar * 1.1, 3)} * ${rowHeight}))`;
   const largest = photo.widths.at(-1);
   const fallback = photo.widths.find((w) => w >= 800) ?? largest;
   const attrs = [
@@ -624,6 +758,7 @@ function renderTile(photo, index, total, rowHeight) {
 
 function renderGallery(photos, pageJs) {
   const rowHeight = rowCss(pageJs);
+  const eager = eagerSizes(photos, pageJs);
   const data = photos.map((p) => ({
     id: p.id, title: p.title, caption: p.caption, location: p.location, date: p.date,
     width: p.width, height: p.height, tint: p.tint, exif: p.exif,
@@ -632,7 +767,7 @@ function renderGallery(photos, pageJs) {
   // before the first paint and before lazy images choose a file.
   const script = pageJs.trim().replace(/<\/(script)/gi, '<\\/$1');
   return `
-      <ol class="gallery" id="gallery" style="--row-h: ${rowHeight}">${photos.map((p, i) => renderTile(p, i, photos.length, rowHeight)).join('')}
+      <ol class="gallery" id="gallery" style="--row-h: ${rowHeight}">${photos.map((p, i) => renderTile(p, i, photos.length, rowHeight, eager[i])).join('')}
       </ol>
       <script type="application/json" id="gallery-data">${scriptJson(data)}</script>
       <script>/* assets/js/page.js (inlined by the build) */
@@ -677,10 +812,20 @@ async function loadSite(notes) {
     }
     return Object.entries(v).map(([k, val]) => [k.trim(), str(val, `${label}.${k}`)]).filter(([k, val]) => k && val);
   };
-  const about = raw.about && typeof raw.about === 'object' ? raw.about : {};
-  const contact = raw.contact && typeof raw.contact === 'object' ? raw.contact : {};
+  const section = (key, example) => {
+    const v = raw[key];
+    if (v == null) return {};
+    if (typeof v === 'object' && !Array.isArray(v)) return v;
+    notes.push(`site.json: "${key}" should be a group like ${example}; it was ignored.`);
+    return {};
+  };
+  const unknown = Object.keys(raw).filter((k) => !SITE_KEYS.includes(k));
+  if (unknown.length) notes.push(`site.json: unknown setting(s) ${unknown.map((k) => `"${k}"`).join(', ')} were ignored (email and links go inside "contact", the bio inside "about").`);
+  const about = section('about', '{ "lede": "…", "text": ["…"] }');
+  const contact = section('contact', '{ "email": "…", "links": { … } }');
+  const showRaw = section('show', '{ "location": "city", "date": "month" }');
+  const licensing = section('licensing', '{ "license": "https://…", "page": "https://…" }');
   const paragraphs = typeof about.text === 'string' ? [about.text] : Array.isArray(about.text) ? about.text : [];
-  const showRaw = raw.show && typeof raw.show === 'object' ? raw.show : {};
 
   const site = {
     name: str(raw.name, 'name') || 'Your Name',
@@ -696,6 +841,8 @@ async function loadSite(notes) {
     email: str(contact.email, 'contact.email'),
     links: [],
     show: { ...SHOW_DEFAULTS },
+    license: '',
+    licensePage: '',
   };
   if (!str(raw.name, 'name')) notes.push('site.json: "name" is empty; showing "Your Name".');
   if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(site.language)) {
@@ -713,6 +860,10 @@ async function loadSite(notes) {
     try {
       const u = new URL(/^[a-z]+:/i.test(site.url) ? site.url : `https://${site.url}`);
       if (!/^https?:$/.test(u.protocol)) throw new Error('not http(s)');
+      // The site's folder: drop a page name (…/index.html), query and hash.
+      u.hash = '';
+      u.search = '';
+      u.pathname = u.pathname.replace(/[^/]*\.[a-z0-9]+$/i, '');
       site.url = u.href.endsWith('/') ? u.href : `${u.href}/`;
     } catch {
       notes.push(`site.json: "url" (${site.url}) isn't a web address like https://yourname.com/; ignored.`);
@@ -734,20 +885,36 @@ async function loadSite(notes) {
       notes.push(`site.json: the link "${label}" (${value}) should be a web address like https://…; it was left out.`);
     }
   }
+  for (const [key, label] of [['license', 'licensing.license'], ['page', 'licensing.page']]) {
+    const v = str(licensing[key], label);
+    if (!v) continue;
+    try {
+      const u = new URL(v);
+      if (!/^https?:$/.test(u.protocol)) throw new Error('scheme');
+      site[key === 'license' ? 'license' : 'licensePage'] = u.href;
+    } catch {
+      notes.push(`site.json: "${label}" (${v}) should be a web address like https://…; it was left out.`);
+    }
+  }
+  if (!site.lede && !site.text.length && !site.facts.length) notes.push('site.json: "about" is empty, so the About section will be blank.');
+  if (!site.email && !site.links.length) notes.push('site.json: no email or links in "contact", so the Contact section will be blank.');
   if (PLACEHOLDER.test(JSON.stringify(raw))) {
     notes.push('site.json still contains placeholder text (e.g. "Your Name", hello@example.com). Replace it with your own details.');
   }
   return site;
 }
 
-function renderMeta(site, cover) {
+function renderMeta(site, cover, photos = []) {
   const title = `${site.name} — ${site.title}`;
+  const locale = site.language.replace('-', '_');
   const lines = [
     `<title>${escapeHtml(title)}</title>`,
     site.description && `<meta name="description" content="${escapeHtml(site.description)}">`,
     `<meta name="author" content="${escapeHtml(site.name)}">`,
     site.url && `<link rel="canonical" href="${escapeHtml(site.url)}">`,
     '<meta property="og:type" content="website">',
+    `<meta property="og:site_name" content="${escapeHtml(site.name)}">`,
+    `<meta property="og:locale" content="${escapeHtml(locale.includes('_') ? locale : `${locale}`)}">`,
     `<meta property="og:title" content="${escapeHtml(title)}">`,
     site.description && `<meta property="og:description" content="${escapeHtml(site.description)}">`,
   ];
@@ -765,18 +932,37 @@ function renderMeta(site, cover) {
       );
     }
   }
-  const person = { '@context': 'https://schema.org', '@type': 'Person', name: site.name };
+  const person = { '@type': 'Person', name: site.name };
   if (site.url) person.url = site.url;
   if (site.tagline) person.description = site.tagline;
   const sameAs = site.links.map(([, url]) => url).filter((u) => /^https?:/.test(u));
   if (sameAs.length) person.sameAs = sameAs;
-  lines.push(`<script type="application/ld+json">${scriptJson(person)}</script>`);
+  const graph = [person];
+  // Who made each photo and how to license it (search engines show this as
+  // "Licensable" on image results). Needs absolute addresses, so only with url.
+  if (site.url) {
+    const year = new Date().getFullYear();
+    for (const p of photos) {
+      const image = {
+        '@type': 'ImageObject',
+        contentUrl: new URL(`${p.base}-${p.widths.at(-1)}.jpg`, site.url).href,
+        name: p.title || undefined,
+        creator: { '@type': 'Person', name: p.artist || site.name },
+        creditText: p.artist || site.name,
+        copyrightNotice: p.copyright || `© ${/\b(1[89]\d\d|2\d{3})\b/.exec(p.date)?.[1] ?? year} ${site.name}`,
+      };
+      if (site.license) image.license = site.license;
+      if (site.licensePage) image.acquireLicensePage = site.licensePage;
+      graph.push(image);
+    }
+  }
+  lines.push(`<script type="application/ld+json">${scriptJson({ '@context': 'https://schema.org', '@graph': graph })}</script>`);
   return `\n    ${lines.filter(Boolean).join('\n    ')}\n    `;
 }
 
 function renderBrand(site) {
   return `
-        <h1 class="brand-name"><a href="./">${escapeHtml(site.name)}</a></h1>${site.tagline ? `
+        <h1 class="brand-name"><a href="#top">${escapeHtml(site.name)}</a></h1>${site.tagline ? `
         <p class="brand-line">${escapeHtml(site.tagline)}</p>` : ''}
       `;
 }
@@ -909,7 +1095,9 @@ async function updateDetails(details, entries) {
   const kept = [];
   for (const e of entries) {
     const existing = details[e.names.slug] ?? details[e.fileName];
-    next[e.names.slug] = existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...blank, ...existing } : { ...blank };
+    if (existing == null) next[e.names.slug] = { ...blank };
+    else if (typeof existing === 'object' && !Array.isArray(existing)) next[e.names.slug] = { ...blank, ...existing };
+    else next[e.names.slug] = existing; // not understood (noted above): kept exactly as written
   }
   for (const [key, value] of Object.entries(details)) {
     if (key.startsWith('_') || key in next) continue;
@@ -976,8 +1164,10 @@ async function build(notes, started) {
   const failures = [];
   let done = 0;
   const results = await mapPool(entries, concurrency, async (entry) => {
+    const own = [];
     try {
-      const photo = await processPhoto(entry, cache, notes, site.show);
+      const photo = await processPhoto(entry, cache, own, site.show);
+      notes.push(...own);
       done++;
       if (photo.status === 'encoded' || photo.status === 'renamed') {
         console.log(`  [${String(done).padStart(String(entries.length).length)}/${entries.length}] ${photo.status.padEnd(8)} ${entry.fileName}`);
@@ -1012,8 +1202,23 @@ async function build(notes, started) {
   }
   const photos = results;
 
-  // Remove generated files that no longer belong to any photo (only ever
-  // files that match this build's naming pattern).
+  const { cover: coverKey, kept } = await updateDetails(details, entries);
+  let cover = coverKey ? photos.find((p) => p.id === coverKey) : null;
+  if (coverKey && !cover) notes.push(`details.json: "_cover" is "${coverKey}", but no photo has that name; using the default.`);
+  cover ??= photos.find((p) => p.width / p.height >= 1.2) ?? photos[0];
+
+  html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
+  html = replaceRegion(html, 'meta', renderMeta(site, cover, photos));
+  html = replaceRegion(html, 'brand', renderBrand(site));
+  html = replaceRegion(html, 'stats', renderStats(photos));
+  html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
+  html = replaceRegion(html, 'about', renderAbout(site));
+  html = replaceRegion(html, 'contact', renderContact(site));
+  html = replaceRegion(html, 'footer', renderFooter(site));
+  const htmlChanged = await writeIfChanged(HTML_FILE, html);
+
+  // Only now, with the new index.html safely written, remove generated files
+  // that no longer belong to any photo (only files matching our naming).
   const keep = new Set(photos.flatMap((p) => p.files));
   let removed = 0;
   for (const f of await readdir(OUT_DIR)) {
@@ -1023,26 +1228,14 @@ async function build(notes, started) {
     }
   }
 
-  const { cover: coverKey, kept } = await updateDetails(details, entries);
-  let cover = coverKey ? photos.find((p) => p.id === coverKey) : null;
-  if (coverKey && !cover) notes.push(`details.json: "_cover" is "${coverKey}", but no photo has that name; using the default.`);
-  cover ??= photos.find((p) => p.width / p.height >= 1.2) ?? photos[0];
-
-  html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
-  html = replaceRegion(html, 'meta', renderMeta(site, cover));
-  html = replaceRegion(html, 'brand', renderBrand(site));
-  html = replaceRegion(html, 'stats', renderStats(photos));
-  html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
-  html = replaceRegion(html, 'about', renderAbout(site));
-  html = replaceRegion(html, 'contact', renderContact(site));
-  html = replaceRegion(html, 'footer', renderFooter(site));
-  const htmlChanged = await writeIfChanged(HTML_FILE, html);
 
   // Summary, in gallery order.
   const digits = Math.max(2, String(photos.length).length);
   console.log('');
+  const fileW = Math.min(48, Math.max(...photos.map((p) => p.file.length), 8)) + 2;
+  const idW = Math.min(40, Math.max(...photos.map((p) => p.id.length), 8)) + 2;
   photos.forEach((p, i) => {
-    console.log(`  ${String(i + 1).padStart(digits, '0')}  ${p.file.padEnd(28)} #photo-${p.id.padEnd(18)} ${`${p.width}×${p.height}`.padEnd(10)} ${p.status}`);
+    console.log(`  ${String(i + 1).padStart(digits, '0')}  ${p.file.padEnd(fileW)}#photo-${p.id.padEnd(idW)}${`${p.width}×${p.height}`.padEnd(11)}${p.status}`);
   });
   const ids = new Set(photos.map((p) => p.id));
   const gone = previousIds.filter((id) => !ids.has(id));

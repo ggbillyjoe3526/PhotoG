@@ -35,8 +35,11 @@ for (const [w, h, dpr, mobile, size] of [
   const by = {};
   for (const f of reqs) { const k = f.replace(/-[0-9a-f]{8}-\d+\.\w+$/, ''); (by[k] ||= []).push(f.match(/-(\d+)\.(\w+)$/).slice(1).join('.')); }
   const width = (x) => +x.split('.')[0];
-  const dup = Object.entries(by).filter(([, v]) => v.some((x, i) => i > 0 && width(x) <= width(v[i - 1])));
-  const upgrades = Object.entries(by).filter(([, v]) => v.length > 1);
+  // A smaller file after a larger one is waste. The same file twice is only
+  // reported: the dev server sends no-store, so a real host serves it from cache.
+  const dup = Object.entries(by).filter(([, v]) => v.some((x, i) => i > 0 && width(x) < width(v[i - 1])));
+  const repeats = Object.entries(by).filter(([, v]) => v.some((x, i) => i > 0 && x === v[i - 1]));
+  const upgrades = Object.entries(by).filter(([, v]) => v.some((x, i) => i > 0 && width(x) > width(v[i - 1])));
   const soft = await page.evaluate(() => [...document.querySelectorAll('.tile')].map((t) => {
     const img = t.querySelector('img');
     const need = t.querySelector('picture').getBoundingClientRect().width * Math.min(devicePixelRatio, 2); // thumbnails stop at 2x
@@ -44,12 +47,34 @@ for (const [w, h, dpr, mobile, size] of [
     const largest = Math.max(...img.srcset.split(',').map((c) => parseInt(c.trim().split(' ')[1], 10)));
     return have && have < need * 0.98 && have < largest ? `${t.id.slice(6)} ${have}<${Math.round(need)}` : null;
   }).filter(Boolean));
+  // Oversized: a file more than 1.5x wider than needed (unless it's the smallest there is).
+  const big = await page.evaluate(() => [...document.querySelectorAll('.tile')].map((t) => {
+    const img = t.querySelector('img');
+    const need = t.querySelector('picture').getBoundingClientRect().width * Math.min(devicePixelRatio, 2);
+    const have = +((img.currentSrc.match(/-(\d+)\.\w+$/) || [])[1] || 0);
+    const smallest = Math.min(...img.srcset.split(',').map((c) => parseInt(c.trim().split(' ')[1], 10)));
+    return have > need * 1.5 && have > smallest ? `${t.id.slice(6)} ${have}>${Math.round(need)}` : null;
+  }).filter(Boolean));
+  // Rotation (phones and tablets): how many new files does turning the device fetch?
+  let rotated = '';
+  if (mobile) {
+    const n0 = reqs.length;
+    await page.setViewportSize({ width: h, height: w });
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.waitForTimeout(800);
+    await page.waitForLoadState('networkidle');
+    rotated = ` | rotate: ${reqs.length - n0} new file(s)${reqs.length - n0 ? ' ' + reqs.slice(n0).join(' ') : ''}`;
+  }
   const bytes = await page.evaluate(() => performance.getEntriesByType('resource').filter((r) => r.name.includes('/assets/gallery/')).reduce((a, r) => a + r.transferSize, 0));
-  const bad = dup.length + failed.length + soft.length;
+  // With a saved S or L preference the first photos start from the M estimate
+  // (fetched before any script runs); that's reported, not failed.
+  const bad = dup.length + failed.length + soft.length + (size === 'm' ? big.length : 0);
   problems += bad;
-  console.log(`${bad ? '✗' : '✓'} ${w}x${h}@${dpr} ${size.toUpperCase()}${throttle ? ' (20 Mbps)' : ''}: ${reqs.length} requests, ${Math.round(bytes / 1024)} KB` +
+  console.log(`${bad ? '✗' : '✓'} ${w}x${h}@${dpr} ${size.toUpperCase()}${throttle ? ' (20 Mbps)' : ''}: ${reqs.length} requests, ${Math.round(bytes / 1024)} KB${rotated}` +
+    (big.length ? `\n    oversized (>1.5x needed): ${big.join(', ')}` : '') +
     (dup.length ? `\n    wasted (same or smaller file fetched again): ${JSON.stringify(dup)}` : '') +
-    (upgrades.length ? `\n    upgrades (ok): ${JSON.stringify(upgrades.filter(([k]) => !dup.some(([d]) => d === k)))}` : '') +
+    (upgrades.length ? `\n    upgrades (ok): ${JSON.stringify(upgrades)}` : '') +
+    (repeats.length ? `\n    same file again (no-store dev server; cached on a real host): ${repeats.map(([k]) => k).join(', ')}` : '') +
     (failed.length ? `\n    failed: ${failed.join(', ')}` : '') +
     (soft.length ? `\n    soft (file narrower than display): ${soft.join(', ')}` : ''));
   await ctx.close();

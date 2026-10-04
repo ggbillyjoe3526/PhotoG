@@ -33,7 +33,6 @@
   --line: rgb(21 21 21 / 0.12);
   --line-strong: rgb(21 21 21 / 0.28);
   --viewer-bg: #f3f3f1;
-  --scrim: rgb(243 243 241 / 0.82);
 
   --gutter: clamp(16px, 3.2vw, 48px);
   --gap: clamp(6px, 0.75vw, 12px);
@@ -55,7 +54,6 @@
     --line: rgb(236 236 234 / 0.12);
     --line-strong: rgb(236 236 234 / 0.3);
     --viewer-bg: #0a0a0a;
-    --scrim: rgb(10 10 10 / 0.78);
     color-scheme: dark;
   }
 }
@@ -68,7 +66,6 @@
   --line: rgb(236 236 234 / 0.12);
   --line-strong: rgb(236 236 234 / 0.3);
   --viewer-bg: #0a0a0a;
-  --scrim: rgb(10 10 10 / 0.78);
   color-scheme: dark;
 }
 
@@ -248,7 +245,7 @@ button {
   color: var(--fg);
 }
 
-/* Shown once main.js has wired it up (no dead button if the script fails). */
+/* Shown once page.js has wired it up (no dead button if the script fails). */
 .theme-toggle:not(.is-ready) {
   visibility: hidden;
 }
@@ -280,7 +277,7 @@ html:not(.js) .site-header {
   display: block;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 599px) {
   .site-header {
     grid-template-columns: 1fr auto;
   }
@@ -386,7 +383,7 @@ html:not(.js) .size-control {
 }
 
 /* Without JavaScript: a CSS-only justified grid (rows fill the width,
-   nothing is cropped). With JavaScript, main.js computes optimal rows. */
+   nothing is cropped). With JavaScript, page.js computes optimal rows. */
 .gallery::after {
   content: "";
   flex-grow: 999999;
@@ -449,16 +446,38 @@ html:not(.js) .size-control {
   text-overflow: ellipsis;
 }
 
-.tile:hover .tile-caption,
 .tile:focus-within .tile-caption {
   color: var(--fg);
 }
 
-.tile:hover .tile-title,
 .tile:focus-within .tile-title {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+/* Hover (only on devices that really hover, so nothing sticks after a tap):
+   a hairline frame around the photo and an underlined title. */
+@media (hover: hover) {
+  .tile-link picture {
+    outline: 1px solid transparent;
+    outline-offset: 3px;
+    transition: outline-color 0.2s var(--ease);
+  }
+
+  .tile-link:hover picture {
+    outline-color: var(--line-strong);
+  }
+
+  .tile:hover .tile-caption {
+    color: var(--fg);
+  }
+
+  .tile:hover .tile-title {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
 }
 
 /* Phones show frame numbers only (titles are in the viewer), except at L,
@@ -647,6 +666,15 @@ html[data-size="s"] .gallery {
   margin: 0;
 }
 
+/* High-contrast (forced colours) mode recolours backgrounds, which would
+   hide the masked ↗ arrow; draw it in the link colour instead. */
+@media (forced-colors: active) {
+  .contact-links a::after {
+    forced-color-adjust: none;
+    background: LinkText;
+  }
+}
+
 /* -------------------------------------------------------- touch targets */
 
 /* On touch screens, small controls get a 44px hit area without moving. */
@@ -685,24 +713,45 @@ html[data-size="s"] .gallery {
 
 html.viewer-open {
   overflow: hidden;
-  background: var(--viewer-bg); /* also behind a classic scrollbar gutter */
+  scrollbar-gutter: auto; /* the viewer gets the whole window (see viewer.js) */
 }
 
 .viewer {
   --side: 0px; /* room for the side arrows (desktop) */
   position: fixed;
   inset: 0;
-  width: 100%;
+  width: 100vw; /* the whole window, also over a classic scrollbar's gutter */
   height: 100%;
   max-width: none;
   max-height: none;
   margin: 0;
   padding: 0;
   border: 0;
-  background: var(--viewer-bg);
+  background: transparent;
   color: var(--fg);
   overflow: hidden;
   overscroll-behavior: contain;
+  touch-action: none; /* gestures are handled by viewer.js */
+}
+
+/* The background is its own layer so it can fade: while opening and
+   closing, and as a photo is pulled down to close. */
+.viewer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--viewer-bg);
+  opacity: var(--fade, 1);
+  transition: opacity 0.22s var(--ease);
+}
+
+.viewer.is-pulling::before {
+  transition: none;
+}
+
+.viewer.is-closing::before,
+.viewer.is-dismissing::before {
+  opacity: 0;
 }
 
 .viewer[open] {
@@ -721,24 +770,14 @@ html.viewer-open {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .viewer[open] {
-    animation: viewer-in 0.24s var(--ease);
+  .viewer[open]::before {
+    animation: fade-in 0.24s var(--ease);
   }
 
   .viewer[open] .viewer-top,
   .viewer[open] .viewer-info,
   .viewer[open] .viewer-side {
     animation: fade-in 0.3s var(--ease) 0.08s backwards;
-  }
-
-  .viewer {
-    transition: background-color 0.26s var(--ease);
-  }
-}
-
-@keyframes viewer-in {
-  from {
-    background-color: transparent;
   }
 }
 
@@ -748,16 +787,24 @@ html.viewer-open {
   }
 }
 
-.viewer.is-closing {
-  background-color: transparent;
+.viewer.is-closing,
+.viewer.is-dismissing {
   pointer-events: none;
 }
 
 .viewer.is-closing .viewer-top,
 .viewer.is-closing .viewer-info,
-.viewer.is-closing .viewer-side {
+.viewer.is-closing .viewer-side,
+.viewer.is-pulling .viewer-top,
+.viewer.is-pulling .viewer-info,
+.viewer.is-pulling .viewer-side {
   opacity: 0;
   transition: opacity 0.15s linear;
+}
+
+/* A photo being pulled down passes over the controls, not under them. */
+.viewer.is-pulling .viewer-stage {
+  z-index: 4;
 }
 
 /* ---- stage and photo */
@@ -768,17 +815,8 @@ html.viewer-open {
   z-index: 1;
   /* Safe areas (notches, home bar); read by viewer.js, not used for layout. */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  touch-action: pinch-zoom;
   user-select: none;
   -webkit-user-select: none;
-}
-
-.viewer.is-pinched .viewer-stage {
-  touch-action: auto; /* let one finger pan a pinch-zoomed page */
-}
-
-.viewer.is-zoomed .viewer-stage {
-  touch-action: none; /* we pan the zoomed photo ourselves */
 }
 
 .viewer-frame {
@@ -792,6 +830,18 @@ html.viewer-open {
 
 .viewer-frame.is-loaded {
   background: none;
+}
+
+/* The neighbouring photo, sliding in during a sideways swipe. */
+.viewer-peek {
+  position: absolute;
+  background: var(--tint, transparent);
+}
+
+.viewer-peek img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .viewer.can-zoom .viewer-frame {
@@ -872,9 +922,13 @@ html.viewer-open {
   color: var(--fg);
 }
 
+.viewer-btn[aria-disabled="true"] .icon,
+.viewer-side[aria-disabled="true"] .icon {
+  opacity: 0.3; /* the icon dims; a focus ring stays at full strength */
+}
+
 .viewer-btn[aria-disabled="true"],
 .viewer-side[aria-disabled="true"] {
-  opacity: 0.3;
   cursor: default;
 }
 
@@ -936,6 +990,13 @@ html.viewer-open {
 
   .viewer-count .viewer-btn {
     display: none;
+  }
+
+  /* No arrows beside the counter here, so its backing is symmetric. */
+  .viewer.is-compact .viewer-count,
+  .viewer.is-zoomed .viewer-count {
+    height: 36px;
+    padding: 0 14px;
   }
 }
 
@@ -1011,6 +1072,9 @@ html.viewer-open {
   align-items: end;
   gap: 12px 40px;
   padding: 14px max(var(--gutter), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
+  max-height: var(--info-max, none);
+  overflow-y: auto;
+  touch-action: pan-y; /* a long caption can scroll; sideways swipes still navigate */
 }
 
 .viewer.is-info-hidden .viewer-info,
@@ -1090,17 +1154,51 @@ html.viewer-open {
     gap: 12px;
   }
 
+  /* Camera data in aligned columns; camera and lens get two each. */
   .viewer-exif {
-    justify-content: flex-start;
-    gap: 8px 18px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px 16px;
+  }
+
+  .viewer-exif .exif-camera,
+  .viewer-exif .exif-lens {
+    grid-column: span 2;
+  }
+
+  .viewer-exif dd {
+    white-space: normal;
   }
 }
 
 /* ---- short landscape screens: controls float, details form a column */
 
-.viewer.is-compact .viewer-top {
-  background: linear-gradient(var(--scrim), transparent);
-  padding-bottom: 18px;
+/* Controls floating over a photo: each sits on a small translucent backing
+   in the theme's own colours, so they read on any picture and never veil
+   the photo itself. */
+.viewer.is-compact .viewer-tools .viewer-btn,
+.viewer.is-zoomed .viewer-tools .viewer-btn,
+.viewer.is-compact .viewer-count,
+.viewer.is-zoomed .viewer-count {
+  background: color-mix(in srgb, var(--viewer-bg) 74%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.viewer.is-compact .viewer-count,
+.viewer.is-zoomed .viewer-count {
+  padding: 0 4px 0 14px;
+  border-radius: 22px;
+}
+
+.viewer.is-compact .viewer-count .viewer-btn:first-child,
+.viewer.is-zoomed .viewer-count .viewer-btn:first-child {
+  margin-left: -10px;
+}
+
+.viewer.is-compact .viewer-count .sep,
+.viewer.is-zoomed .viewer-count .sep {
+  color: var(--fg-muted);
 }
 
 .viewer.is-compact .viewer-info {
@@ -1116,14 +1214,23 @@ html.viewer-open {
 }
 
 .viewer.is-compact .viewer-exif {
-  justify-content: flex-start;
-  gap: 8px 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
 }
 
-/* While zoomed, the bar floats over the photo too. */
-.viewer.is-zoomed .viewer-top {
-  background: linear-gradient(var(--scrim), transparent);
-  padding-bottom: 18px;
+.viewer.is-compact .viewer-exif .exif-camera,
+.viewer.is-compact .viewer-exif .exif-lens {
+  grid-column: span 2;
+}
+
+/* In the side column, location and date stack instead of wrapping at "·". */
+.viewer.is-compact .viewer-meta .meta-part {
+  display: block;
+}
+
+.viewer.is-compact .viewer-meta .meta-sep {
+  display: none;
 }
 
 .viewer.is-zoomed .viewer-side {

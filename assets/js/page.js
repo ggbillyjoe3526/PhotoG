@@ -51,7 +51,9 @@
       metas.forEach(function (meta, i) { meta.setAttribute('content', explicit ? bg : original[i]); });
       if (button) {
         button.setAttribute('data-current', theme);
-        button.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+        var label = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+        button.setAttribute('aria-label', label);
+        button.title = label;
       }
     }
 
@@ -102,6 +104,8 @@
   var MAX_PER_ROW = 12;
   var phone = window.matchMedia('(max-width: 599px)'); // same breakpoint as style.css
 
+  function viewportHeight() { return document.documentElement.clientHeight || window.innerHeight; }
+
   function baseRowHeight(width) {
     return Math.max(ROW.min, Math.min(ROW.max, ROW.base + ROW.vw * width));
   }
@@ -119,18 +123,28 @@
    * further its height is from the target (much more beyond 0.8x / 1.3x, or
    * if a photo would become a sliver), and neighbouring rows cost more the
    * more their heights differ, so the page has an even rhythm. Every row
-   * fills the width exactly, except a last row that would be stretched.
+   * fills the width exactly, except a last row that would be stretched too
+   * tall: that one is drawn no taller than the row above it, and costs more
+   * the emptier it is (most of all a single photo), so earlier rows
+   * rebalance to give the gallery a good ending.
    */
   function partition(ratios, width, gap, target, minTile) {
     var n = ratios.length;
-    var JUMP = 0.8;
+    var JUMP = 0.8;    // uneven neighbouring rows
+    var LAST = 1.2;    // an unfilled last row
+    var SINGLE = 0.5;  // ... holding a single photo
     var prefix = [0];
     for (var i = 0; i < n; i++) prefix.push(prefix[i] + ratios[i]);
     var heightOf = function (s, e) { return (width - gap * (e - s - 1)) / (prefix[e] - prefix[s]); };
+    var lastHeight = function (prevHeight) { return Math.min(target, prevHeight || target); };
 
     // best[e][k]: lowest cost for photos [0, e) when the last row has k photos.
+    // For the gallery's last row there are two ways to draw it: justified
+    // (full width) or left part-filled at the height of the row above;
+    // `open[k]` remembers which was cheaper.
     var best = [[]];
     var back = [[]];
+    var open = [];
     for (var e = 1; e <= n; e++) {
       best[e] = [];
       back[e] = [];
@@ -140,33 +154,58 @@
         minRatio = Math.min(minRatio, ratios[s]);
         var h = heightOf(s, e);
         if (h < target * 0.4 && k > 1) break; // more photos only make it shorter
-        var stretched = e === n && h > target * 1.3; // last row, left short
-        var c = 0;
-        if (!stretched) {
+        var isLast = e === n;
+        var mustOpen = isLast && h > target * 1.3; // justified would be far too tall
+        var c = Infinity;
+        if (!mustOpen) {
           var d = Math.log(h / target); // half the target is as bad as double
           c = d * d * (h > target ? 1.5 : 1);
           if (h > target * 1.3) c += 4 * Math.pow(Math.log(h / (target * 1.3)), 2);
           if (h < target * 0.8) c += 4 * Math.pow(Math.log(h / (target * 0.8)), 2);
           if (k > 1 && h * minRatio < minTile) c += 10; // no slivers
         }
+        var sum = prefix[e] - prefix[s];
+        var openCost = function (drawn) {
+          var fill = Math.min(1, (sum * drawn + gap * (k - 1)) / width);
+          return LAST * Math.pow(1 - fill, 2) + (k === 1 && n > 1 ? SINGLE : 0);
+        };
+        // Cost of this row after a previous row of height prevH (0: first row).
+        var rowCost = function (prevH) {
+          var justified = c;
+          if (prevH && c < Infinity) {
+            var j = Math.log(h / prevH);
+            // Ending taller than the row above costs extra: the gallery
+            // shouldn't finish on its biggest pictures.
+            justified += (isLast && j > 0 ? JUMP * 3 : JUMP) * j * j;
+          }
+          if (!isLast) return { cost: justified, open: false };
+          var drawn = lastHeight(prevH);
+          var o = openCost(drawn) + (prevH ? JUMP * Math.pow(Math.log(drawn / prevH), 2) : 0);
+          return o < justified && h > drawn ? { cost: o, open: true } : { cost: justified, open: false };
+        };
         if (s === 0) {
-          best[e][k] = c;
+          var first = rowCost(0);
+          best[e][k] = first.cost;
           back[e][k] = 0;
+          if (isLast) open[k] = first.open;
           continue;
         }
-        var bestPrev = Infinity;
+        var bestTotal = Infinity;
         var bestK = 0;
+        var bestOpen = false;
         for (var k2 = 1; k2 <= MAX_PER_ROW && k2 <= s; k2++) {
           if (best[s][k2] === undefined) continue;
-          var jump = stretched ? 0 : JUMP * Math.pow(Math.log(h / heightOf(s - k2, s)), 2);
-          if (best[s][k2] + jump < bestPrev) {
-            bestPrev = best[s][k2] + jump;
+          var r = rowCost(heightOf(s - k2, s));
+          if (best[s][k2] + r.cost < bestTotal) {
+            bestTotal = best[s][k2] + r.cost;
             bestK = k2;
+            bestOpen = r.open;
           }
         }
         if (bestK) {
-          best[e][k] = bestPrev + c;
+          best[e][k] = bestTotal;
           back[e][k] = bestK;
+          if (isLast) open[k] = bestOpen;
         }
       }
     }
@@ -179,12 +218,15 @@
     var rows = [];
     for (var end = n, size = lastK; end > 0;) {
       var start = end - size;
-      var height = heightOf(start, end);
-      var justified = !(end === n && height > target * 1.3);
-      rows.unshift({ start: start, end: end, height: justified ? height : target, justified: justified });
+      rows.unshift({ start: start, end: end, height: heightOf(start, end), justified: true });
       var prev = back[end][size];
       end = start;
       size = prev;
+    }
+    var last = rows[rows.length - 1];
+    if (last && open[lastK]) {
+      last.justified = false;
+      last.height = lastHeight(rows.length > 1 ? rows[rows.length - 2].height : 0);
     }
     return rows;
   }
@@ -206,6 +248,25 @@
     each(picture.querySelectorAll('source, img'), function (node) {
       if (node.getAttribute('sizes') !== value) node.setAttribute('sizes', value);
     });
+  }
+
+  /**
+   * The first photos start with the build's per-screen-size `sizes`, which
+   * the browser re-evaluates whenever the window changes (e.g. on rotation),
+   * fetching new files. Once one has loaded, pin `sizes` to the file it
+   * shows; from then on only upgrade() asks for more, within the 2x cap.
+   */
+  function freeze(img, picture) {
+    if (img.dataset.frozen || img.loading === 'lazy') return;
+    var apply = function () {
+      var have = candidateWidth(img);
+      if (!have) return;
+      img.dataset.frozen = '1';
+      var value = Math.max(1, Math.floor(have / (window.devicePixelRatio || 1))) + 'px';
+      each(picture.querySelectorAll('source, img'), function (node) { node.setAttribute('sizes', value); });
+    };
+    if (img.complete && img.naturalWidth) apply();
+    else img.addEventListener('load', apply, { once: true });
   }
 
   var pending = typeof WeakMap === 'function' ? new WeakMap() : null;
@@ -242,6 +303,7 @@
     if (!img) return;
     if (!img.currentSrc && img.loading === 'lazy') return setSizes(picture, width);
     if (!pending) return;
+    freeze(img, picture);
     pending.set(tile, width);
     if (!(img.complete && img.naturalWidth)) {
       if (!img.dataset.waiting) {
@@ -271,6 +333,8 @@
     var gap = parseFloat(getComputedStyle(gallery).columnGap) || 0;
     var factor = sizeFactor(size);
     var target = baseRowHeight(width) * factor;
+    // On short screens (a phone held sideways) a row should fit the screen.
+    if (size !== 's') target = Math.min(target, (viewportHeight() - 40) * 0.9);
     var minTile = (phone.matches ? 64 : 80) * Math.min(1, factor + 0.25);
     var rows = partition(ratios, width, gap, target, minTile);
 
@@ -307,8 +371,11 @@
     var lastWidth = 0;
     var frame = 0;
 
+    var lastHeight = 0;
+
     function relayout() {
       lastWidth = gallery.getBoundingClientRect().width;
+      lastHeight = viewportHeight();
       layout(gallery, size);
     }
 
@@ -318,11 +385,15 @@
     function onResize() {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(function () {
-        if (Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5) relayout();
+        var widthChanged = Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5;
+        // Height only matters for the short-screen cap; ignore small changes
+        // such as a phone's address bar showing and hiding while scrolling.
+        var heightChanged = Math.abs(viewportHeight() - lastHeight) > lastHeight * 0.25;
+        if (widthChanged || heightChanged) relayout();
       });
     }
     if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(gallery);
-    else window.addEventListener('resize', onResize);
+    window.addEventListener('resize', onResize);
     if (phone.addEventListener) phone.addEventListener('change', relayout);
 
     /** The photo nearest the centre of the screen (the one being looked at). */

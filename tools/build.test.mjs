@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  decodeEntities, describe, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
-  isHiddenFile, nameInfo, num, rowCss, scriptJson, text, widthLadder,
+  decodeEntities, describe, describeJsonError, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
+  isHiddenFile, nameInfo, normaliseTyped, num, rowCss, scriptJson, text, widthLadder,
 } from './build.mjs';
 
 test('nameInfo strips order numbers and dates, keeps real numbers', () => {
@@ -25,6 +25,8 @@ test('camera file names make no title and are never hidden', () => {
   assert.equal(nameInfo('IMG_0042.jpg').title, '');
   assert.equal(isHiddenFile('_DSC1234.jpg'), false);
   assert.equal(isHiddenFile('_MG_1234.jpg'), false);
+  assert.equal(isHiddenFile('_IGP0042.jpg'), false);
+  assert.equal(isHiddenFile('_1000123.jpg'), false);
   assert.equal(isHiddenFile('_draft-sunset.jpg'), true);
   assert.equal(isHiddenFile('sunset.jpg'), false);
 });
@@ -102,7 +104,7 @@ test('escaping for HTML and inline JSON', () => {
 });
 
 test('row height CSS comes from page.js', () => {
-  assert.equal(rowCss('var ROW = { min: 220, base: 200, vw: 0.09, max: 440 };'), 'clamp(220px, calc(200px + 9vw), 440px)');
+  assert.equal(rowCss('var ROW = { min: 220, base: 200, vw: 0.09, max: 440 };'), 'min(clamp(220px, calc(200px + 9vw), 440px), 85vh)');
   assert.throws(() => rowCss('nothing here'));
 });
 
@@ -111,4 +113,23 @@ test('library errors are explained in plain language', () => {
   assert.match(explainError(new Error('Input buffer contains unsupported image format')), /isn't an image/);
   assert.match(explainError(new Error('VipsJpeg: Corrupt JPEG data: bad Huffman code')), /damaged/);
   assert.match(explainError(new Error('VipsJpeg: Corrupt JPEG data: premature end of data segment')), /damaged/);
+});
+
+test('typed camera values get units', () => {
+  assert.equal(normaliseTyped('focal', '35'), '35mm');
+  assert.equal(normaliseTyped('aperture', '5.6'), 'f/5.6');
+  assert.equal(normaliseTyped('aperture', 'f2'), 'f/2');
+  assert.equal(normaliseTyped('shutter', '125'), '1/125s');
+  assert.equal(normaliseTyped('shutter', '1/60'), '1/60s');
+  assert.equal(normaliseTyped('shutter', '0.5'), '0.5s');
+  assert.equal(normaliseTyped('iso', '400'), 'ISO 400');
+  assert.equal(normaliseTyped('camera', 'Leica M6'), 'Leica M6');
+  assert.equal(describe({}, { exif: false, shutter: '250', iso: '400' }).exif.shutter, '1/250s');
+});
+
+test('JSON errors say where and what', () => {
+  const raw = '{\n  "a": "x"\n  "b": "y"\n}';
+  let err;
+  try { JSON.parse(raw); } catch (e) { err = e; }
+  assert.match(describeJsonError(raw, err), /line 3.*missing comma at the end of line 2/);
 });

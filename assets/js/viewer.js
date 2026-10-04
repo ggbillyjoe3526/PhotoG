@@ -7,8 +7,10 @@
    - Shows a sharp copy sized to the screen, with the thumbnail as an instant
      preview, and preloads the neighbours.
    - Keyboard: ←/→, Home/End, I (details), Z (zoom), Esc.
-     Touch: swipe sideways, swipe down to close, tap to hide the controls,
-     double-tap to zoom; pinch zoom fetches a sharper file.
+     Mouse: click the photo to zoom, the side strips to move, beside the
+     photo to close.
+     Touch: tap to show/hide the controls, double-tap or pinch to zoom,
+     swipe sideways (the next photo slides in alongside), swipe down to close.
    - Every photo has a link (#photo-<name>); Back closes the viewer.
    ========================================================================== */
 (function () {
@@ -92,6 +94,7 @@
       '</div>' +
       '<div class="viewer-stage">' +
         '<div class="viewer-frame"><img class="viewer-preview" alt="" aria-hidden="true"></div>' +
+        '<div class="viewer-peek" aria-hidden="true" hidden><img alt=""></div>' +
         '<button type="button" class="viewer-side prev" data-action="prev" aria-label="Previous photo" title="Previous (←)">' + ICONS.prev + '</button>' +
         '<button type="button" class="viewer-side next" data-action="next" aria-label="Next photo" title="Next (→)">' + ICONS.next + '</button>' +
       '</div>' +
@@ -190,7 +193,10 @@
         return { W: W, H: H, t: safe.t, b: safe.b, l: side + safe.l, r: side + safe.r + column };
       }
       var t = immersive ? safe.t : top.offsetHeight;
-      var b = immersive ? safe.b : infoVisible() ? reserveForInfo(W) : t; // no details: centred on screen
+      // The details panel gets the room its tallest entry needs, but never
+      // more than about a quarter of the screen (a long caption then scrolls).
+      var b = immersive ? safe.b : infoVisible() ? Math.min(reserveForInfo(W), Math.round(H * 0.24)) : t;
+      dialog.style.setProperty('--info-max', b + 'px');
       return { W: W, H: H, t: t, b: b, l: side + safe.l, r: side + safe.r };
     }
 
@@ -231,10 +237,7 @@
     /** Display width the sharp image is chosen for (zoom and pinch included). */
     function wantedWidth() {
       if (!fit) return 0;
-      var scale = zoom ? zoom.s : 1;
-      var vv = window.visualViewport;
-      if (vv && vv.scale > 1.01) scale = Math.max(scale, vv.scale);
-      return Math.ceil(fit.w * scale);
+      return Math.ceil(fit.w * (zoom ? Math.max(1, zoom.s) : 1));
     }
 
     /** Point the sharp image at a width; only ever asks for more pixels. */
@@ -267,9 +270,9 @@
       titleEl.textContent = photo.title || '';
       metaEl.textContent = '';
       [photo.location, photo.date].filter(Boolean).forEach(function (part, n) {
-        if (n) metaEl.appendChild(document.createTextNode(' '));
-        var span = el('span');
-        span.textContent = (n ? '· ' : '') + part;
+        if (n) metaEl.appendChild(el('span', 'meta-sep', ' · '));
+        var span = el('span', 'meta-part');
+        span.textContent = part;
         metaEl.appendChild(span);
       });
       captionEl.textContent = photo.caption && photo.caption !== photo.title ? photo.caption : '';
@@ -424,6 +427,10 @@
     function open(i, options) {
       options = options || {};
       if (!dialog.open) {
+        // The page loses its scrollbar gutter while the viewer is open (so
+        // the viewer can use the whole window); hold the gallery's width so
+        // nothing behind it re-flows.
+        galleryApi.gallery.style.width = galleryApi.gallery.getBoundingClientRect().width + 'px';
         root.classList.add('viewer-open');
         dialog.classList.remove('is-immersive', 'is-closing', 'is-zoomed');
         dialog.showModal();
@@ -463,7 +470,11 @@
 
     /** Reset everything once the dialog has closed; focus the photo's tile. */
     function cleanup(i) {
-      dialog.classList.remove('is-closing', 'is-zoomed', 'is-pinched');
+      root.classList.remove('viewer-open');
+      galleryApi.gallery.style.width = '';
+      dialog.classList.remove('is-closing', 'is-zoomed', 'is-pulling', 'is-dismissing');
+      dialog.style.removeProperty('--fade');
+      hidePeek();
       root.classList.remove('viewer-open');
       frame.getAnimations && frame.getAnimations().forEach(function (a) { a.cancel(); });
       frame.style.transform = '';
@@ -558,7 +569,14 @@
       if (i >= 0) {
         if (closing) { abortClose(); show(i); }
         else if (dialog.open) show(i);
-        else { open(i); pushedState = false; requestAnimationFrame(focusDialog); }
+        else {
+          open(i);
+          // Reopened by Forward: this history entry is one we added, so
+          // closing should step back over it again.
+          pushedState = !!(history.state && history.state.viewer);
+          if (pushedState) try { history.scrollRestoration = 'manual'; } catch (e) { /* old browsers */ }
+        }
+        requestAnimationFrame(focusDialog);
       } else if (dialog.open) {
         pushedState = false;
         var options = teardownOptions;
@@ -582,7 +600,8 @@
     function updateZoomButton() {
       var ok = current >= 0 && canZoom();
       dialog.classList.toggle('can-zoom', ok);
-      zoomButton.setAttribute('aria-disabled', String(!ok && !zoom));
+      // Only offered when there is more detail to see than the screen shows.
+      zoomButton.hidden = !ok && !zoom;
       zoomButton.setAttribute('aria-pressed', String(!!zoom));
       zoomButton.setAttribute('aria-label', zoom ? 'Zoom out' : 'Zoom to full resolution');
     }
@@ -615,9 +634,11 @@
       zoom.y = p.y;
     }
 
-    function startZoom(px, py) {
-      if (zoom || current < 0 || !canZoom()) return;
-      var s = zoomScale();
+    /** Zoom in around (px, py): to full resolution, or to `scale` if given
+     *  (touch double-tap zooms even when there's little extra detail). */
+    function startZoom(px, py, scale) {
+      if (zoom || current < 0 || (!scale && !canZoom())) return;
+      var s = scale || zoomScale();
       if (frame.getAnimations) frame.getAnimations().forEach(function (a) { a.cancel(); });
       zoom = { s: s, x: fit.x, y: fit.y };
       if (px == null) { px = fit.x + fit.w / 2; py = fit.y + fit.h / 2; }
@@ -629,7 +650,13 @@
       setFullSizes(wantedWidth());
       applyZoom(true);
       updateZoomButton();
-      statusEl.textContent = 'Zoomed in. Move the pointer or drag to look around; press Z or Esc to zoom out.';
+      announceZoom();
+    }
+
+    function announceZoom() {
+      statusEl.textContent = zoom
+        ? 'Zoomed in. Move the pointer, drag or use the arrow keys to look around; press Z or Esc to zoom out.'
+        : 'Zoomed out.';
     }
 
     function endZoom(animate) {
@@ -639,6 +666,7 @@
       frame.style.transition = animate && !reducedMotion() ? 'transform 0.3s ' + EASE : 'none';
       frame.style.transform = '';
       updateZoomButton();
+      if (animate) announceZoom();
     }
 
     function toggleZoom(px, py) {
@@ -698,7 +726,7 @@
         else if (name === 'zoom') toggleZoom();
         return;
       }
-      if (event.pointerType === 'touch' || lastPointerType === 'touch') return; // handled by the tap logic
+      if (event.pointerType === 'touch' || lastPointerType === 'touch') return; // touch: handled by the gestures below
       if (frame.contains(event.target)) toggleZoom(event.clientX, event.clientY);
       else if (zoom) endZoom(true);
       else if (event.target === stage) close(); // the empty area around the photo
@@ -721,7 +749,7 @@
         case 'Home': if (!zoom) go(-current); break;
         case 'End': if (!zoom) go(total - 1 - current); break;
         case 'i':
-        case 'I': toggleInfo(); break;
+        case 'I': if (!zoom) toggleInfo(); break;
         case 'z':
         case 'Z': toggleZoom(); break;
         default: return;
@@ -739,44 +767,193 @@
       }).observe(dialog);
     }
 
-    // Pinch zoom (the browser's own): let one finger pan, and fetch a file
-    // sharp enough for the zoomed size.
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', function () {
-        if (!dialog.open) return;
-        var pinched = window.visualViewport.scale > 1.01;
-        dialog.classList.toggle('is-pinched', pinched);
-        if (pinched) setFullSizes(wantedWidth());
-      });
-    }
 
     /* ------------------------------------------------------------- touch */
-    var drag = null;
+    // Gestures anywhere in the viewer except on its buttons:
+    //   tap: show / hide the controls (a tap never closes the viewer)
+    //   double-tap or pinch: zoom around your fingers; drag to pan when zoomed
+    //   swipe sideways: next / previous, with the neighbour sliding in alongside
+    //   swipe down: close (the background fades as you pull)
+    var touches = {};   // fingers on the screen: pointerId -> { x, y }
+    var drag = null;    // one-finger gesture
+    var pinch = null;   // two-finger gesture
     var suppressClick = false;
     var lastPointerType = '';
-    var lastTap = { t: 0, x: 0, y: 0 };
+    var tapTimer = 0;
+    var lastTap = null;
+    var peek = q('.viewer-peek');
+    var peekImg = peek.querySelector('img');
+    var peekIndex = -1;
+    var GAP = 24; // between the photo and its sliding neighbour
 
+    function fingers() { return Object.keys(touches); }
     function suppressNextClick() {
       suppressClick = true;
       setTimeout(function () { suppressClick = false; }, 350);
     }
+    function onControl(target) { return !!(target.closest && target.closest('button, a, [data-action]')); }
+    function onPhoto(x, y) {
+      var r = frame.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
 
-    stage.addEventListener('pointerdown', function (event) {
+    /* ---- the neighbour that slides in during a sideways swipe */
+    function preparePeek(dir) {
+      var n = current + dir;
+      if (n < 0 || n >= total) { hidePeek(); return; }
+      if (peekIndex === n) return;
+      peekIndex = n;
+      var r = fitFor(n, insets.cache);
+      var src = sources(n).thumb;
+      peek.style.left = r.x + 'px';
+      peek.style.top = r.y + 'px';
+      peek.style.width = r.w + 'px';
+      peek.style.height = r.h + 'px';
+      peek.style.setProperty('--tint', photos[n].tint || 'transparent');
+      if (src) peekImg.src = src; else peekImg.removeAttribute('src');
+      peekImg.hidden = !src;
+      peek.hidden = false;
+    }
+    function movePeek(dx) {
+      var dir = dx < 0 ? 1 : -1;
+      preparePeek(dir);
+      if (peek.hidden) return;
+      peek.style.transform = 'translateX(' + (dx + dir * (dialog.clientWidth + GAP)) + 'px)';
+    }
+    function hidePeek() {
+      if (peek.getAnimations) peek.getAnimations().forEach(function (a) { a.cancel(); });
+      peek.hidden = true;
+      peek.style.transform = '';
+      peekIndex = -1;
+    }
+
+    /** After a swipe: slide the photo out and its neighbour into place. */
+    function slide(dir, fromX) {
+      frame.style.transform = '';
+      if (reducedMotion() || !frame.animate) { hidePeek(); go(dir); return; }
+      var timing = { duration: 220, easing: 'cubic-bezier(0.25, 0.6, 0.3, 1)', fill: 'forwards' };
+      var out = frame.animate([
+        { transform: 'translateX(' + fromX + 'px)' },
+        { transform: 'translateX(' + (-dir * (dialog.clientWidth + GAP)) + 'px)' },
+      ], timing);
+      if (!peek.hidden) peek.animate([{ transform: peek.style.transform }, { transform: 'none' }], timing);
+      out.onfinish = function () {
+        out.cancel();
+        go(dir); // the frame now shows the same preview exactly where the neighbour is
+        hidePeek();
+      };
+    }
+
+    /** A swipe that didn't go far enough: everything springs back. */
+    function settle(fromX) {
+      frame.style.transform = '';
+      if (reducedMotion() || !frame.animate) { hidePeek(); return; }
+      var timing = { duration: 220, easing: EASE };
+      frame.animate([{ transform: fromX }, { transform: 'none' }], timing);
+      if (!peek.hidden) {
+        var back = peek.animate([{ transform: peek.style.transform }, {
+          transform: 'translateX(' + (peekIndex > current ? 1 : -1) * (dialog.clientWidth + GAP) + 'px)',
+        }], timing);
+        back.onfinish = hidePeek;
+      }
+    }
+
+    /** Swipe down past the threshold: carry on downwards and close. */
+    function dismiss(dy) {
+      dialog.classList.add('is-dismissing');
+      frame.style.transform = '';
+      if (reducedMotion() || !frame.animate) { close({ animate: false }); return; }
+      var away = frame.animate([
+        { transform: 'translateY(' + dy + 'px)', opacity: 1 },
+        { transform: 'translateY(' + (dy + 220) + 'px)', opacity: 0 },
+      ], { duration: 200, easing: 'cubic-bezier(0.3, 0.5, 0.4, 1)', fill: 'forwards' });
+      away.onfinish = function () { close({ animate: false }); };
+    }
+
+    /* ---- pinch */
+    function points() {
+      var ids = fingers();
+      return [touches[ids[0]], touches[ids[1]]];
+    }
+    function maxPinch() { return Math.max(zoomScale(), 2); }
+
+    function startPinch() {
+      clearTimeout(tapTimer);
+      lastTap = null;
+      if (drag && drag.axis && drag.axis !== 'pan') { frame.style.transform = ''; hidePeek(); }
+      drag = null;
+      if (!zoom) {
+        if (frame.getAnimations) frame.getAnimations().forEach(function (a) { a.cancel(); });
+        zoom = { s: 1, x: fit.x, y: fit.y };
+        dialog.classList.add('is-zoomed');
+        updateZoomButton();
+      }
+      var p = points();
+      pinch = {
+        d: Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y) || 1,
+        mx: (p[0].x + p[1].x) / 2, my: (p[0].y + p[1].y) / 2,
+        s: zoom.s, x: zoom.x, y: zoom.y,
+      };
+    }
+
+    function movePinch() {
+      var p = points();
+      var d = Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+      var mx = (p[0].x + p[1].x) / 2;
+      var my = (p[0].y + p[1].y) / 2;
+      var s = Math.min(maxPinch() * 1.25, Math.max(0.6, pinch.s * d / pinch.d));
+      // The point of the photo that was between the fingers stays there.
+      zoom.s = s;
+      zoom.x = mx - (pinch.mx - pinch.x) * (s / pinch.s);
+      zoom.y = my - (pinch.my - pinch.y) * (s / pinch.s);
+      applyZoom(false);
+    }
+
+    function endPinch() {
+      pinch = null;
+      suppressNextClick();
+      if (zoom.s < 1.05) { endZoom(true); return; }
+      zoom.s = Math.min(zoom.s, maxPinch());
+      var c = clampPan(zoom.x, zoom.y, zoom.s);
+      zoom.x = c.x;
+      zoom.y = c.y;
+      applyZoom(true);
+      setFullSizes(wantedWidth());
+      announceZoom();
+      // A finger still down carries on as a pan.
+      var ids = fingers();
+      if (ids.length === 1) {
+        var t = touches[ids[0]];
+        drag = { x: t.x, y: t.y, t: Date.now(), axis: 'pan', id: +ids[0], zx: zoom.x, zy: zoom.y };
+      }
+    }
+
+    /* ---- pointer events */
+    dialog.addEventListener('pointerdown', function (event) {
       lastPointerType = event.pointerType;
-      if (event.pointerType === 'mouse' || !event.isPrimary) return;
-      if (dialog.classList.contains('is-pinched')) return; // the browser is handling pan
-      drag = { x: event.clientX, y: event.clientY, t: Date.now(), axis: null, id: event.pointerId, zx: zoom && zoom.x, zy: zoom && zoom.y };
+      if (event.pointerType !== 'touch' || closing || onControl(event.target)) return;
+      touches[event.pointerId] = { x: event.clientX, y: event.clientY };
+      if (fingers().length === 2) { startPinch(); return; }
+      if (fingers().length > 2) return;
+      drag = {
+        x: event.clientX, y: event.clientY, t: Date.now(), axis: null, id: event.pointerId,
+        zx: zoom && zoom.x, zy: zoom && zoom.y,
+      };
     });
 
-    stage.addEventListener('pointermove', function (event) {
+    dialog.addEventListener('pointermove', function (event) {
+      if (!(event.pointerId in touches)) return;
+      touches[event.pointerId] = { x: event.clientX, y: event.clientY };
+      if (pinch) { movePinch(); return; }
       if (!drag || event.pointerId !== drag.id) return;
       var dx = event.clientX - drag.x;
       var dy = event.clientY - drag.y;
       if (!drag.axis) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        drag.axis = zoom ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        drag.axis = zoom ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'x' : dy > 0 ? 'down' : 'none';
+        clearTimeout(tapTimer);
         frame.classList.add('is-dragging');
-        try { stage.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+        if (drag.axis === 'down') dialog.classList.add('is-pulling');
       }
       if (drag.axis === 'pan') {
         var p = clampPan(drag.zx + dx, drag.zy + dy, zoom.s);
@@ -785,42 +962,20 @@
         applyZoom(false);
       } else if (drag.axis === 'x') {
         var atEdge = (dx > 0 && current === 0) || (dx < 0 && current === total - 1);
-        frame.style.transform = 'translateX(' + (atEdge ? dx * 0.25 : dx) + 'px)';
-      } else if (dy > 0) {
-        frame.style.transform = 'translateY(' + dy + 'px)';
-        frame.style.opacity = String(Math.max(0.35, 1 - dy / 400));
+        var x = atEdge ? dx * 0.25 : dx;
+        frame.style.transform = 'translateX(' + x + 'px)';
+        if (!atEdge) movePeek(dx); else hidePeek();
+      } else if (drag.axis === 'down') {
+        var down = Math.max(0, dy);
+        frame.style.transform = 'translateY(' + down + 'px)';
+        dialog.style.setProperty('--fade', String(Math.max(0.2, 1 - down / 360)));
       }
     });
 
-    /** Slide the current photo out and the next one in, after a swipe. */
-    function slide(dir, fromX) {
-      var W = dialog.clientWidth;
-      if (reducedMotion() || !frame.animate) {
-        frame.style.transform = '';
-        go(dir);
-        return;
-      }
-      frame.style.transform = '';
-      var out = frame.animate([
-        { transform: 'translateX(' + fromX + 'px)' },
-        { transform: 'translateX(' + (-dir * W) + 'px)' },
-      ], { duration: 170, easing: 'cubic-bezier(0.3, 0.5, 0.4, 1)', fill: 'forwards' });
-      out.onfinish = function () {
-        out.cancel();
-        if (!go(dir)) return;
-        frame.animate([
-          { transform: 'translateX(' + dir * Math.min(W * 0.35, 160) + 'px)', opacity: 0 },
-          { transform: 'none', opacity: 1 },
-        ], { duration: 240, easing: EASE });
-      };
-    }
-
-    function settle(fromTransform) {
-      if (reducedMotion() || !frame.animate) return;
-      frame.animate([{ transform: fromTransform }, { transform: 'none' }], { duration: 220, easing: EASE });
-    }
-
-    function endDrag(event, cancelled) {
+    function endTouch(event, cancelled) {
+      if (!(event.pointerId in touches)) return;
+      delete touches[event.pointerId];
+      if (pinch) { if (fingers().length < 2) endPinch(); return; }
       if (!drag || event.pointerId !== drag.id) return;
       var dx = event.clientX - drag.x;
       var dy = event.clientY - drag.y;
@@ -832,51 +987,44 @@
       if (!axis) {
         if (cancelled) return;
         suppressNextClick();
-        var onPhoto = frame.contains(event.target);
         var now = Date.now();
-        var double = now - lastTap.t < 300 && Math.abs(event.clientX - lastTap.x) < 30 && Math.abs(event.clientY - lastTap.y) < 30;
-        lastTap = { t: double ? 0 : now, x: event.clientX, y: event.clientY };
-        if (double && onPhoto) {
-          setImmersive(!dialog.classList.contains('is-immersive')); // undo the first tap
-          toggleZoom(event.clientX, event.clientY);
-        } else if (onPhoto || zoom) {
-          setImmersive(!dialog.classList.contains('is-immersive'));
-        } else if (event.target === stage) {
-          close();
+        var x = event.clientX;
+        var y = event.clientY;
+        if (lastTap && now - lastTap.t < 300 && Math.hypot(x - lastTap.x, y - lastTap.y) < 40) {
+          // Double-tap: zoom (the first tap's action never happened).
+          clearTimeout(tapTimer);
+          lastTap = null;
+          if (zoom) endZoom(true);
+          else if (onPhoto(x, y)) startZoom(x, y, maxPinch());
+          return;
         }
+        lastTap = { t: now, x: x, y: y };
+        clearTimeout(tapTimer);
+        tapTimer = setTimeout(function () {
+          lastTap = null;
+          setImmersive(!dialog.classList.contains('is-immersive'));
+        }, 260);
         return;
       }
       suppressNextClick();
-      if (axis === 'pan') return;
+      if (axis === 'pan' || axis === 'none') return;
       var dragged = frame.style.transform;
-      frame.style.opacity = '';
       var fast = Math.abs(axis === 'x' ? dx : dy) / dt > 0.45;
-      if (!cancelled && axis === 'x' && (Math.abs(dx) > 60 || fast) && go.can(dx < 0 ? 1 : -1)) {
-        slide(dx < 0 ? 1 : -1, dx);
-      } else if (!cancelled && axis === 'y' && dy > 0 && (dy > 110 || fast)) {
-        // Carry on downwards and close.
-        frame.style.transform = '';
-        if (!reducedMotion() && frame.animate) {
-          var away = frame.animate([
-            { transform: 'translateY(' + dy + 'px)', opacity: Math.max(0.35, 1 - dy / 400) },
-            { transform: 'translateY(' + (dy + 160) + 'px)', opacity: 0 },
-          ], { duration: 160, easing: 'linear', fill: 'forwards' });
-          away.onfinish = function () { close({ animate: false }); };
-        } else {
-          close({ animate: false });
-        }
+      if (axis === 'x') {
+        var dir = dx < 0 ? 1 : -1;
+        if (!cancelled && (Math.abs(dx) > 60 || fast) && current + dir >= 0 && current + dir < total) slide(dir, dx);
+        else settle(dragged);
+      } else if (!cancelled && dy > 0 && (dy > 110 || fast)) {
+        dismiss(dy);
       } else {
-        frame.style.transform = '';
-        if (dragged) settle(dragged);
+        dialog.classList.remove('is-pulling');
+        dialog.style.removeProperty('--fade');
+        settle(dragged);
       }
     }
-    go.can = function (delta) {
-      var next = current + delta;
-      return next >= 0 && next < total;
-    };
 
-    stage.addEventListener('pointerup', function (e) { endDrag(e, false); });
-    stage.addEventListener('pointercancel', function (e) { endDrag(e, true); });
+    dialog.addEventListener('pointerup', function (e) { endTouch(e, false); });
+    dialog.addEventListener('pointercancel', function (e) { endTouch(e, true); });
 
     /* ------------------------------------------------- deep link on load */
     var initial = indexFromHash();
