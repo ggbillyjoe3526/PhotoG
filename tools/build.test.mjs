@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   decodeEntities, describe, describeJsonError, eagerSizes, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
-  isHiddenFile, nameInfo, normaliseTyped, num, pageFunction, pageSetting, rowCss, scriptJson, sourceFingerprint, text, widthLadder,
+  isHiddenFile, nameInfo, normaliseTyped, num, pageFunction, pageSetting, rowCss, scriptJson, fileFingerprint, fingerprintComment, readFingerprints, text, widthLadder,
 } from './build.mjs';
 
 const PAGE_JS = readFileSync(new URL('../assets/js/page.js', import.meta.url), 'utf8');
@@ -51,6 +51,7 @@ test('camera names are tidied', () => {
   assert.equal(formatCamera('Canon', 'Canon EOS R5'), 'Canon EOS R5');
   assert.equal(formatCamera('SONY', 'ILCE-7RM5'), 'Sony A7R V');
   assert.equal(formatCamera('FUJIFILM', 'X-T5'), 'Fujifilm X-T5');
+  assert.equal(formatCamera('NIKON CORPORATION', 'NIKON Z 6_2'), 'Nikon Z 6II');
   assert.equal(formatCamera('', ''), '');
 });
 
@@ -165,8 +166,8 @@ test('the build reads its layout settings from page.js', () => {
   assert.throws(() => pageFunction('', 'partition'), /partition/);
   const photos = [{ width: 3000, height: 2000 }, { width: 2000, height: 3000 }, { width: 3000, height: 2000 }];
   const sizes = eagerSizes(photos, PAGE_JS);
-  assert.equal(sizes.length, 2);
-  assert.match(sizes[0], /^\(min-resolution: 2\.5dppx\) and \(max-width: 420px\) \d+px, /);
+  assert.equal(sizes.length, 3, 'the whole first row loads at once'); // all three share the first row on wide screens
+  assert.match(sizes[0], /^\(min-resolution: 2\.5dppx\) and \(max-width: 360px\) \d+px, /);
   assert.match(sizes[0], /, \d+px$/);
 });
 
@@ -180,9 +181,12 @@ test('page.js LAYOUT matches style.css', () => {
   assert.deepEqual([...breakpoints], [L.phone], 'phone breakpoint differs');
 });
 
-test('the source fingerprint ignores line endings and a byte-order mark', () => {
-  const a = sourceFingerprint(['{\n  "name": "A"\n}\n', '{}', 'var x;']);
-  assert.equal(sourceFingerprint(['\uFEFF{\r\n  "name": "A"\r\n}\r\n', '{}', 'var x;']), a);
-  assert.notEqual(sourceFingerprint(['{\n  "name": "B"\n}\n', '{}', 'var x;']), a);
-  assert.match(a, /^[0-9a-f]{12}$/);
+test('source fingerprints ignore line endings and a byte-order mark, and round-trip', () => {
+  const a = fileFingerprint('{\n  "name": "A"\n}\n');
+  assert.equal(fileFingerprint('\uFEFF{\r\n  "name": "A"\r\n}\r\n'), a);
+  assert.notEqual(fileFingerprint('{\n  "name": "B"\n}\n'), a);
+  assert.match(a, /^[0-9a-f]{10}$/);
+  const prints = { 'site.json': a, 'photos/details.json': '0123456789', 'assets/js/page.js': 'abcdefabcd' };
+  assert.deepEqual(readFingerprints(`<head>\n    ${fingerprintComment(prints)}\n</head>`), prints);
+  assert.equal(readFingerprints('<head></head>'), null);
 });

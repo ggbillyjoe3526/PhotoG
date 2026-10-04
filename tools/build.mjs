@@ -43,6 +43,10 @@ const SITE_FILE = path.join(ROOT, 'site.json');
 const PAGE_JS_FILE = path.join(ROOT, 'assets', 'js', 'page.js');
 const DETAILS_FILE = path.join(SRC_DIR, 'details.json');
 const CACHE_FILE = path.join(SRC_DIR, '.build-cache.json');
+// What the gallery holds, so the text can be rebuilt on a computer without
+// the originals (photos/ isn't in git). Published, but holds nothing the
+// page doesn't show.
+const MANIFEST_FILE = path.join(OUT_DIR, 'gallery.json');
 
 /** Image encoding. Changing anything here re-encodes every photo and gives
  *  the files new names, so browsers never keep serving old versions. */
@@ -61,10 +65,12 @@ const PIXEL_LIMIT = 1_000_000_000; // sharp's default (268 MP) is too small for 
 
 /** Markup only (no re-encode). */
 const MARKUP = {
-  // The first N photos load at once (the browser fetches them before any
-  // script runs, using estimated sizes); the rest are lazy and get their
-  // exact size from page.js first, which is inlined right after the gallery.
-  eager: 2,
+  // The photos of the first row load at once (the browser fetches them
+  // before any script runs, using sizes worked out by the build): at least
+  // this many, and at most eagerMax, however wide the screen. The rest are
+  // lazy and get their exact size from page.js, inlined after the gallery.
+  eagerMin: 2,
+  eagerMax: 5,
 };
 
 const REGIONS = ['meta', 'brand', 'stats', 'gallery', 'about', 'contact', 'footer'];
@@ -237,6 +243,8 @@ export function formatCamera(make, model) {
       break;
     }
   }
+  // Nikon writes "Z 6_2" for the Z 6II.
+  model = model.replace(/_([2-9])$/, (_, n) => ROMAN[+n]);
   // Sony writes internal codes (ILCE-7RM5); show the marketed name (A7R V).
   const sony = /^ILCE-(\d+)([A-Z]*?)(?:M(\d+))?$/.exec(model);
   if (niceMake === 'Sony' && sony) {
@@ -359,19 +367,31 @@ export async function readJson(file, fallback, notes) {
 }
 
 /**
- * A fingerprint of the files index.html is built from that live in git
- * (site.json, photos/details.json, assets/js/page.js). The build writes it
- * into index.html; tools/check-site.mjs recomputes it, so the publishing
+ * Fingerprints of the files index.html is built from that live in git
+ * (site.json, photos/details.json, assets/js/page.js). The build writes them
+ * into index.html; tools/check-site.mjs recomputes them, so the publishing
  * workflow notices when one was edited (say on github.com) without
- * rebuilding. Line endings and a byte-order mark don't count, so Windows
- * checkouts agree with Linux ones.
+ * rebuilding, and names it. Line endings and a byte-order mark don't count,
+ * so Windows checkouts agree with Linux ones.
  */
-export function sourceFingerprint(contents) {
-  const normal = contents.map((c) => String(c ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'));
-  return hash(normal.join('\u0000'), 12);
-}
 export const FINGERPRINT_FILES = ['site.json', 'photos/details.json', 'assets/js/page.js'];
-export const FINGERPRINT_MARK = /<!-- sources: ([0-9a-f]{12}) [^>]*-->/;
+export function fileFingerprint(content) {
+  return hash(String(content ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'), 10);
+}
+export function fingerprintComment(prints) {
+  const pairs = FINGERPRINT_FILES.map((f) => `${f}=${prints[f]}`).join(' ');
+  return `<!-- sources: ${pairs}; checked by tools/check-site.mjs before publishing -->`;
+}
+/** The fingerprints recorded in an index.html, or null. */
+export function readFingerprints(html) {
+  const mark = /<!-- sources: ([^;>]*);[^>]*-->/.exec(html);
+  if (!mark) return null;
+  return Object.fromEntries([...mark[1].matchAll(/([\w./-]+)=([0-9a-f]+)/g)].map((m) => [m[1], m[2]]));
+}
+async function currentFingerprints() {
+  const entries = await Promise.all(FINGERPRINT_FILES.map(async (f) => [f, fileFingerprint(await readFile(path.join(ROOT, f), 'utf8').catch(() => ''))]));
+  return Object.fromEntries(entries);
+}
 
 /** "Unexpected token…" → where it is and what is probably wrong. */
 export function describeJsonError(raw, err) {
@@ -738,9 +758,10 @@ async function inspectPhoto(entry, ctx) {
   const text = describe(meta, entry.override, entry.names, show);
   // Rights embedded in the images: the photo's own, else the site owner's.
   const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? new Date().getFullYear();
+  const artist = text.rights.artist || site.name;
   text.rights = {
-    artist: text.rights.artist || site.name,
-    copyright: text.rights.copyright || `© ${year} ${site.name}`,
+    artist,
+    copyright: text.rights.copyright || `© ${year} ${artist}`,
     statement: site.licensePage || site.license,
   };
   text.year = year;
@@ -826,10 +847,11 @@ function srcset(photo, ext) {
 }
 
 /**
- * `sizes` for the first (eager) photos, which browsers start fetching before
- * any script runs: their actual width in the gallery at a range of screen
- * widths, worked out with the page's own row layout. 3x screens get 2x
- * files (page.js caps thumbnails at 2x too).
+ * `sizes` for the first-row (eager) photos, which browsers start fetching
+ * before any script runs: their actual width in the gallery at a range of
+ * screen widths, worked out with the page's own row layout. 3x screens get
+ * 2x files (page.js caps thumbnails at 2x too). One entry per eager photo:
+ * as many as the widest layout's first row holds (MARKUP.eagerMin–eagerMax).
  */
 export function eagerSizes(photos, pageJs) {
   if (!photos.length) return [];
@@ -843,8 +865,9 @@ export function eagerSizes(photos, pageJs) {
   // Screen widths up to which each estimate applies (CSS px). Within each
   // range the layout is sampled every 40px and the widest result is used, so
   // the photo is never soft and rarely more than a step too large.
-  const steps = [];
-  for (let vw = 420; vw <= 1260; vw += 60) steps.push(vw);
+  // Common phone widths get their own step: rows change quickly there.
+  const steps = [360, 375, 390, 414, 430, 480, 540];
+  for (let vw = 600; vw <= 1260; vw += 60) steps.push(vw);
   steps.push(1400, 1600, 1800, 2000, 2300, 2600);
   const at = (vw) => {
     // The same sums as page.js's layout(), with style.css's margins.
@@ -856,12 +879,15 @@ export function eagerSizes(photos, pageJs) {
     const maxH = vh - L.chrome;
     const target = Math.min(Math.max(row.min, Math.min(row.max, row.base + row.vw * width)), maxH * L.fit);
     const widths = new Array(per.length).fill(0);
-    for (const r of partition(ratios, width, gap, target, L.minTile[isPhone ? 0 : 1], maxH)) {
+    const rows = partition(ratios, width, gap, target, L.minTile[isPhone ? 0 : 1], maxH);
+    firstRow = Math.max(firstRow, rows[0] ? rows[0].end : 0);
+    for (const r of rows) {
       for (let k = r.start; k < r.end && k < per.length; k++) widths[k] = Math.ceil(ratios[k] * r.height);
     }
     return widths;
   };
-  const per = photos.slice(0, MARKUP.eager).map(() => []);
+  let firstRow = 0;
+  const per = photos.slice(0, MARKUP.eagerMax).map(() => []);
   let from = 320;
   for (const upTo of steps) {
     const widest = new Array(per.length).fill(0);
@@ -870,7 +896,8 @@ export function eagerSizes(photos, pageJs) {
     widest.forEach((w, k) => per[k].push([upTo, w]));
     from = upTo + 1;
   }
-  return per.map((list) => {
+  const count = Math.min(per.length, Math.max(MARKUP.eagerMin, firstRow));
+  return per.slice(0, count).map((list) => {
     const parts = [];
     list.forEach(([vw, w], i) => {
       const query = i === list.length - 1 ? '' : `(max-width: ${vw}px)`;
@@ -883,12 +910,12 @@ export function eagerSizes(photos, pageJs) {
 
 function renderTile(photo, index, total, rowHeight, eagerSize) {
   const ar = photo.width / photo.height;
-  const eager = index < MARKUP.eager;
+  const eager = !!eagerSize;
   const number = String(index + 1).padStart(Math.max(2, String(total).length), '0');
   // Eager photos: their width at each screen size (see eagerSizes). Lazy ones:
   // a close guess that page.js, inlined after the gallery, replaces with the
   // exact width before any of them starts loading (it's what no-JS uses).
-  const sizes = eager && eagerSize ? eagerSize : `min(100vw, calc(${round(ar * 1.1, 3)} * ${rowHeight}))`;
+  const sizes = eager ? eagerSize : `min(100vw, calc(${round(ar * 1.1, 3)} * ${rowHeight}))`;
   const largest = photo.widths.at(-1);
   const fallback = photo.widths.find((w) => w >= 800) ?? largest;
   const attrs = [
@@ -1327,6 +1354,59 @@ async function main() {
   }
 }
 
+/** Write every generated region of index.html. Returns whether it changed. */
+async function writeSite(html, { site, photos, pageJs, cover, prints }) {
+  html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
+  html = replaceRegion(html, 'meta', `${renderMeta(site, cover, photos).trimEnd()}\n    ${fingerprintComment(prints)}\n    `);
+  html = replaceRegion(html, 'brand', renderBrand(site));
+  html = replaceRegion(html, 'stats', renderStats(photos));
+  html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
+  html = replaceRegion(html, 'about', renderAbout(site));
+  html = replaceRegion(html, 'contact', renderContact(site));
+  html = replaceRegion(html, 'footer', renderFooter(site));
+  return writeIfChanged(HTML_FILE, html);
+}
+
+/** The gallery as last built, if index.html still shows exactly it and all
+ *  its images are present; otherwise null. */
+async function loadManifest(previousIds) {
+  try {
+    const m = JSON.parse(await readFile(MANIFEST_FILE, 'utf8'));
+    const photos = Array.isArray(m.photos) ? m.photos : null;
+    if (!photos || photos.map((p) => p.id).join('\n') !== previousIds.join('\n')) return null;
+    if (!await allExist(photos.flatMap((p) => p.files ?? ['(missing)']))) return null;
+    return { photos, cover: photos.find((p) => p.id === m.cover) ?? photos[0] };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * photos/ is empty (e.g. a fresh copy of the site on another computer, since
+ * the originals aren't in git): keep the gallery exactly as it is and apply
+ * site.json and page.js. details.json text needs the originals.
+ */
+async function textOnlyBuild(html, kept, { site, pageJs, notes, started }) {
+  const before = readFingerprints(html) ?? {};
+  const prints = await currentFingerprints();
+  const details = 'photos/details.json';
+  if (before[details] && before[details] !== prints[details]) {
+    notes.push(
+      'photos/details.json has changed, but its text can only be applied with your originals in photos/.\n' +
+      '    Build on the computer that has them before publishing (the publish check will stop until then).',
+    );
+    prints[details] = before[details];
+  }
+  const changed = await writeSite(html, { site, photos: kept.photos, pageJs, cover: kept.cover, prints });
+  console.log(
+    `No originals in photos/, so the gallery of ${kept.photos.length} photos was kept as it is and only the text ` +
+    `from site.json was applied (${((Date.now() - started) / 1000).toFixed(1)}s, ` +
+    `${changed ? 'index.html updated' : 'index.html already up to date'}).`,
+  );
+  if (!site.url) notes.push('"url" in site.json is empty, so link previews (social media, messaging) show no image yet. Set it once the site is live.');
+  printNotes(notes);
+}
+
 async function build(notes, started) {
   let html = await readFile(HTML_FILE, 'utf8');
   for (const name of REGIONS) readRegion(html, name); // fail fast on missing markers
@@ -1353,6 +1433,10 @@ async function build(notes, started) {
   }
   if (!entries.length && previousIds.length && !ALLOW_EMPTY) {
     const left = [found.hidden.length && `${found.hidden.length} hidden`, found.unsupported.length && `${found.unsupported.length} in formats browsers can't show`].filter(Boolean);
+    // Nothing at all in photos/ (not even hidden files): a computer without
+    // the originals. Update the text and keep the gallery as it is.
+    const kept = !found.photos.length && !left.length ? await loadManifest(previousIds) : null;
+    if (kept) return textOnlyBuild(html, kept, { site, pageJs, notes, started });
     throw new Error(
       `No photos to publish in photos/${left.length ? ` (${left.join(', ')})` : ''}, but the live gallery has ${previousIds.length}. Nothing was changed.\n` +
       '  Add your photos to photos/ and run again (or pass --allow-empty to really publish an empty gallery).',
@@ -1435,17 +1519,13 @@ async function build(notes, started) {
   if (coverKey && !cover) notes.push(`details.json: "_cover" is "${coverKey}", but no photo has that name; using the default.`);
   cover ??= photos.find((p) => p.width / p.height >= 1.2) ?? photos[0];
 
-  html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
-  const fingerprint = sourceFingerprint(await Promise.all(FINGERPRINT_FILES.map((f) => readFile(path.join(ROOT, f), 'utf8').catch(() => ''))));
-  html = replaceRegion(html, 'meta', `${renderMeta(site, cover, photos).trimEnd()}\n` +
-    `    <!-- sources: ${fingerprint} (site.json, photos/details.json, page.js as last built; checked before publishing) -->\n    `);
-  html = replaceRegion(html, 'brand', renderBrand(site));
-  html = replaceRegion(html, 'stats', renderStats(photos));
-  html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
-  html = replaceRegion(html, 'about', renderAbout(site));
-  html = replaceRegion(html, 'contact', renderContact(site));
-  html = replaceRegion(html, 'footer', renderFooter(site));
-  const htmlChanged = await writeIfChanged(HTML_FILE, html);
+  // The gallery's record (for text-only rebuilds), then the page itself.
+  await writeIfChanged(MANIFEST_FILE, JSON.stringify({
+    note: 'Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don\'t edit.',
+    cover: cover?.id ?? '',
+    photos: photos.map(({ file, status, ...p }) => p),
+  }, null, 1) + '\n');
+  const htmlChanged = await writeSite(html, { site, photos, pageJs, cover, prints: await currentFingerprints() });
 
   // Only now, with the new index.html safely written, remove generated files
   // that no longer belong to any photo (only files matching our naming).

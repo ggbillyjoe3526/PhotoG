@@ -60,7 +60,6 @@
   --gutter: clamp(16px, 3.2vw, 48px);
   --gap: clamp(6px, 0.75vw, 12px);
   --row-gap: clamp(18px, 1.8vw, 26px);
-  /* Side margins; on very wide screens the page stops growing at 2200px. */
   /* Side margins: never under a notch or rounded corner (landscape phones),
      and on very wide screens the page stops growing at 2200px. */
   --page-gutter-l: max(var(--gutter), env(safe-area-inset-left), calc((100vw - 2200px) / 2));
@@ -444,7 +443,7 @@ html:not(.js) .size-control {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: opacity 0.6s var(--ease);
+  transition: opacity 0.3s var(--ease);
 }
 
 .tile img.is-loading {
@@ -829,7 +828,7 @@ html.viewer-open {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .viewer[open]::before {
+  .viewer[open]:not(.is-instant)::before {
     animation: fade-in 0.24s var(--ease);
   }
 
@@ -1063,7 +1062,7 @@ html.viewer-open {
   }
 
   /* No arrows beside the counter here, so its backing is symmetric. */
-  .viewer.is-overlapping .viewer-count {
+  .viewer-count.is-over-photo {
     height: 36px;
     padding: 0 14px;
   }
@@ -1142,8 +1141,12 @@ html.viewer-open {
   gap: 12px 40px;
   padding: 14px max(var(--gutter), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
   max-height: var(--info-max, none);
-  overflow-y: auto;
+  overflow-y: hidden; /* scrolls (and takes focus) only when it must: */
   touch-action: pan-y; /* a long caption can scroll; sideways swipes still navigate */
+}
+
+.viewer-info.is-scrollable {
+  overflow-y: auto;
 }
 
 .viewer.is-info-hidden .viewer-info,
@@ -1236,18 +1239,21 @@ html.viewer-open {
     gap: 12px;
   }
 
-  /* Tablets: camera and lens on the first row, the exposure on the second. */
+  /* Tablets: camera and lens on the first line, the exposure values on the
+     next, evenly spaced. The empty ::after is a line break between them. */
   .viewer-exif {
-    display: grid;
-    grid-template-columns: repeat(4, auto);
-    grid-auto-flow: row dense;
-    justify-content: start;
-    gap: 10px 22px;
+    justify-content: flex-start;
+    gap: 5px 22px;
   }
 
-  .viewer-exif .exif-camera,
-  .viewer-exif .exif-lens {
-    grid-column: span 2;
+  .viewer:not(.is-compact) .viewer-exif::after {
+    content: "";
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .viewer:not(.is-compact) .viewer-exif > div:not(.exif-camera):not(.exif-lens) {
+    order: 2;
   }
 
   .viewer-exif dd {
@@ -1256,16 +1262,17 @@ html.viewer-open {
 }
 
 /* Phones: one compact line for the exposure ("210mm · f/8 · 1/320s · ISO 160")
-   under camera and lens. The labels stay for screen readers. */
+   under camera and lens. The labels stay for screen readers. (Not in the
+   side column of short landscape screens, which has its own layout.) */
 @media (max-width: 599px) {
-  .viewer-exif {
+  .viewer:not(.is-compact) .viewer-exif {
     display: flex;
     flex-wrap: wrap;
     gap: 2px 0;
     font-size: 12px;
   }
 
-  .viewer-exif dt {
+  .viewer:not(.is-compact) .viewer-exif dt {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1274,34 +1281,36 @@ html.viewer-open {
     white-space: nowrap;
   }
 
-  .viewer-exif > div {
+  .viewer:not(.is-compact) .viewer-exif > div {
     display: inline-flex;
     align-items: baseline;
   }
 
-  .viewer-exif .exif-camera,
-  .viewer-exif .exif-lens {
+  .viewer:not(.is-compact) .viewer-exif .exif-camera,
+  .viewer:not(.is-compact) .viewer-exif .exif-lens {
     flex-basis: 100%;
     color: var(--fg-muted);
   }
 
-  .viewer-exif .exif-lens {
+  .viewer:not(.is-compact) .viewer-exif .exif-lens {
     margin-bottom: 4px;
   }
 
-  .viewer-exif > div:not(.exif-camera):not(.exif-lens) + div:not(.exif-camera):not(.exif-lens)::before {
+  /* The "·" stays with the value before it, so a wrapped line never starts
+     with one. */
+  .viewer:not(.is-compact) .viewer-exif > div:not(.exif-camera):not(.exif-lens):not(:last-child)::after {
     content: "·";
     margin: 0 0.6em;
     color: var(--fg-faint);
   }
 
-  .viewer-exif dd {
+  .viewer:not(.is-compact) .viewer-exif dd {
     white-space: nowrap;
   }
 
   /* The other values carry their unit (mm, f/, s); ISO needs its name.
      Screen readers already hear the (hidden) "ISO" label, so not twice. */
-  .viewer-exif .exif-iso dd::before {
+  .viewer:not(.is-compact) .viewer-exif .exif-iso dd::before {
     content: "ISO ";
     content: "ISO " / "";
   }
@@ -1310,40 +1319,58 @@ html.viewer-open {
 /* ---- short landscape screens: controls float, details form a column */
 
 /* Controls floating over the photo: dark glass with light icons in both
-   themes, so they read on any picture. Only when they actually overlap it. */
-.viewer.is-overlapping .viewer-tools .viewer-btn,
-.viewer.is-overlapping .viewer-count {
+   themes, so they read on any picture. Only where they actually overlap it
+   (viewer.js sets is-over-photo on the buttons' group and the counter). */
+.viewer-tools.is-over-photo .viewer-btn,
+.viewer-count.is-over-photo {
   --fg: #f2f2f0;
   --fg-muted: #d5d5d1;
   --fg-faint: #a9a9a5;
-  background: rgb(18 18 18 / 0.5);
+  background: rgb(18 18 18 / 0.6);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
-.viewer.is-overlapping .viewer-count {
+/* Over a photo the focus ring is white with a dark halo, so it shows on
+   light and dark pictures alike. */
+.viewer-tools.is-over-photo .viewer-btn:focus-visible,
+.viewer-count.is-over-photo .viewer-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgb(0 0 0 / 0.55);
+}
+
+.viewer-count.is-over-photo {
   padding: 0 4px 0 14px;
   border-radius: 22px;
 }
 
-.viewer.is-overlapping .viewer-count .viewer-btn:first-child {
+.viewer-count.is-over-photo .viewer-btn:first-child {
   margin-left: -10px;
 }
 
-.viewer.is-overlapping .viewer-count .sep {
+.viewer-count.is-over-photo .sep {
   color: var(--fg-muted);
 }
 
 .viewer.is-compact .viewer-info {
   top: 0;
   left: auto;
-  width: min(260px, 30vw);
-  grid-template-columns: 1fr;
-  align-content: end;
+  width: clamp(200px, 30vw, 260px);
+  /* A column that sits at the bottom, but scrolls from the top when the
+     text is longer than the screen (align-content: end would push the top
+     out of reach). */
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  padding: 64px max(var(--gutter), env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) 20px;
-  overflow-y: auto;
+  max-height: none; /* the whole height (not the bottom panel's limit) */
+  /* Top: clear of the floating buttons (44px, below the safe area). */
+  padding: calc(max(10px, env(safe-area-inset-top)) + 52px) max(var(--gutter), env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) 20px;
   background: var(--viewer-bg);
+}
+
+.viewer.is-compact .viewer-info > :first-child {
+  margin-top: auto;
 }
 
 .viewer.is-compact .viewer-exif {
@@ -1357,9 +1384,11 @@ html.viewer-open {
   grid-column: span 2;
 }
 
-/* In the side column, location and date stack instead of wrapping at "·". */
+/* In the side column, location and date stack instead of wrapping at "·",
+   and a long place name wraps rather than running off the edge. */
 .viewer.is-compact .viewer-meta .meta-part {
   display: block;
+  white-space: normal;
 }
 
 .viewer.is-compact .viewer-meta .meta-sep {

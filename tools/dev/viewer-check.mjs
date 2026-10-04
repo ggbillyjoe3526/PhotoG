@@ -124,6 +124,24 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   await page.mouse.click(700, 450); await settle(page, 500);
   const z2 = (await state(page)).cls.includes('is-zoomed');
   check('click photo zooms in, click again zooms out', z1 && !z2);
+  // Esc zooms out every time, not only the first (browsers can skip the
+  // dialog's cancel event on repeated Esc presses).
+  let escOk = true;
+  for (let round = 0; round < 3; round++) {
+    if (round === 1) { await page.mouse.click(s.frame.x + s.frame.w / 2, s.frame.y + s.frame.h / 2); }
+    else await page.keyboard.press('z');
+    await settle(page, 450);
+    await page.keyboard.press('Escape'); await settle(page, 450);
+    const r = await state(page);
+    if (!r.open || r.cls.includes('is-zoomed')) escOk = false;
+  }
+  check('Esc zooms out on every zoom (3 rounds, key and click), viewer stays open', escOk);
+  // A mouse drag on the photo is not a click: it doesn't zoom in.
+  await page.mouse.move(s.frame.x + s.frame.w / 2, s.frame.y + s.frame.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.frame.x + s.frame.w / 2 + 60, s.frame.y + s.frame.h / 2 + 10, { steps: 6 });
+  await page.mouse.up(); await settle(page, 400);
+  check('a mouse drag on the unzoomed photo doesn\'t zoom in', !(await state(page)).cls.includes('is-zoomed'));
   await page.keyboard.press('Escape'); await settle(page, 600);
   check('Esc closes', !(await state(page)).open);
   // history race: open, Back, Forward immediately
@@ -241,12 +259,12 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   await page.setViewportSize({ width: 1439, height: 900 }); await settle(page, 300);
   await page.tap('.viewer-side.next'); await settle(page, 500);
   check('touch tap on a side arrow moves to the next photo', (await state(page)).idx === '05');
-  // I is ignored while zoomed
+  // I while zoomed zooms out first (like Esc) and leaves the details setting alone
   await page.keyboard.press('z'); await settle(page, 400);
   const before = await page.evaluate(() => document.querySelector('.viewer').classList.contains('is-info-hidden'));
-  await page.keyboard.press('i'); await settle(page, 200);
-  const after = await page.evaluate(() => document.querySelector('.viewer').classList.contains('is-info-hidden'));
-  check('I does nothing while zoomed', before === after);
+  await page.keyboard.press('i'); await settle(page, 400);
+  const after = await page.evaluate(() => ({ hidden: document.querySelector('.viewer').classList.contains('is-info-hidden'), zoomed: document.querySelector('.viewer').classList.contains('is-zoomed') }));
+  check('I while zoomed zooms out and leaves the details as they were', before === after.hidden && !after.zoomed, JSON.stringify(after));
   await ctx.close();
 }
 {
@@ -335,6 +353,53 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   check('reduced motion: no running animations on open', anims === 0, String(anims));
   await page.keyboard.press('Escape'); await settle(page, 300);
   check('reduced motion: closes', !(await state(page)).open);
+  await ctx.close();
+}
+
+// 10. Short landscape phones: the details column starts below the floating
+//     buttons, scrolls when it must, and nothing runs off sideways.
+{
+  const bad = [];
+  for (const [w, h] of [[568, 320], [640, 360], [667, 375], [740, 360], [844, 390]]) {
+    for (const scheme of ['light']) {
+      const { ctx, page } = await newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, colorScheme: scheme });
+      await page.goto(base + '#photo-ridgelines', { waitUntil: 'networkidle' });
+      await settle(page, 400);
+      for (let k = 0; k < 17; k++) {
+        const r = await page.evaluate(() => {
+          const info = document.querySelector('.viewer-info');
+          const title = document.querySelector('.viewer-title').getBoundingClientRect();
+          const tools = document.querySelector('.viewer-tools').getBoundingClientRect();
+          return {
+            idx: document.querySelector('.viewer-index').textContent,
+            compact: document.querySelector('.viewer').classList.contains('is-compact'),
+            titleTop: Math.round(title.top + info.scrollTop), toolsBottom: Math.round(tools.bottom),
+            wide: info.scrollWidth - info.clientWidth,
+          };
+        });
+        if (r.compact && (r.titleTop < r.toolsBottom || r.wide > 1)) bad.push(`${w}x${h} #${r.idx}: title ${r.titleTop} vs buttons ${r.toolsBottom}, sideways ${r.wide}px`);
+        await page.keyboard.press('ArrowRight'); await settle(page, 120);
+      }
+      await ctx.close();
+    }
+  }
+  check('landscape phones: details column below the buttons, nothing cut off sideways (5 sizes x 17 photos)', !bad.length, bad.slice(0, 4).join('; '));
+}
+
+// 11. Dark backings only where the controls are really over the photo: open
+//     a tile from the very top of the screen (the open animation passes
+//     under the bar) and check once it has settled.
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.evaluate(() => { const t = document.getElementById('photo-dunes'); scrollBy(0, t.getBoundingClientRect().top - 20); });
+  await settle(page, 200);
+  await page.click('#photo-dunes .tile-link'); await settle(page, 700);
+  const over = await page.evaluate(() => [...document.querySelectorAll('.is-over-photo')].map((e) => e.className));
+  check('no dark backings when the photo sits clear of the controls (opened from the top edge)', over.length === 0, over.join(', '));
+  await page.keyboard.press('z'); await settle(page, 500);
+  const zoomedOver = await page.evaluate(() => document.querySelector('.viewer-tools').classList.contains('is-over-photo'));
+  check('…and they appear when the zoomed photo is under the buttons', zoomedOver);
   await ctx.close();
 }
 

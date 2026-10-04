@@ -363,9 +363,10 @@
     gallery.classList.add('is-justified');
   }
 
-  /** Fade thumbnails in as they arrive (only those not already decoded). */
+  /** Fade thumbnails in as they arrive (only those not already decoded).
+   *  The first row (eager) appears as soon as it can: no fade to wait for. */
   function fadeIn(gallery) {
-    each(gallery.querySelectorAll('.tile img'), function (img) {
+    each(gallery.querySelectorAll('.tile img[loading="lazy"]'), function (img) {
       if (img.complete && img.naturalWidth) return;
       img.classList.add('is-loading');
       var done = function () { img.classList.remove('is-loading'); };

@@ -10,21 +10,24 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { FINGERPRINT_FILES, FINGERPRINT_MARK, sourceFingerprint } from './build.mjs';
+import { FINGERPRINT_FILES, fileFingerprint, readFingerprints } from './build.mjs';
 
 const ROOT = process.env.PHOTOG_ROOT ? path.resolve(process.env.PHOTOG_ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const problems = [];
 
 const read = (f) => { try { return readFileSync(path.join(ROOT, f), 'utf8'); } catch { return ''; } };
-const built = FINGERPRINT_MARK.exec(html)?.[1];
-const now = sourceFingerprint(FINGERPRINT_FILES.map(read));
+const built = readFingerprints(html);
 if (!built) problems.push('index.html has no build fingerprint. Run `npm run build` and commit the result.');
-else if (built !== now) {
-  problems.push(
-    `index.html is out of date: ${FINGERPRINT_FILES.join(', ')} changed since it was built.\n` +
-    '  Run `npm run build` on your computer, then commit and push index.html (and assets/, photos/details.json).',
-  );
+else {
+  const changed = FINGERPRINT_FILES.filter((f) => built[f] !== fileFingerprint(read(f)));
+  if (changed.length) {
+    problems.push(
+      `index.html is out of date: ${changed.join(' and ')} changed since it was built.\n` +
+      '  Run `npm run build` on your computer (for photos/details.json: the one with your originals in photos/),\n' +
+      '  then commit and push index.html, assets/ and photos/details.json.',
+    );
+  }
 }
 
 const refs = new Set();

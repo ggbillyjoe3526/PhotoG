@@ -69,10 +69,11 @@ highest-scoring version, which is why every attempt is committed.
 | F3: full-screen viewer | 1 | **7.7** | Total rework (now `viewer.js`) |
 | F3 | 2 | **8.9** | Refined: a new touch layer |
 | F3 | 3 | **8.7** | Four blockers (phone EXIF clipped, tap jump when zoomed, drag zoomed out, broken-image icon). All fixed |
-| F3 | 4 (last) | pending | |
-| Final build (whole site) | 1 | pending | |
+| F3 | 4 (last) | **8.9** | Ties the best F3 score. Two blockers (repeated Esc closed instead of zooming out; landscape details column overflowing upward) and refinements, all fixed after the loop |
+| Final build (whole site) | 1 | **8.8** | Two blockers (dark control backings stuck on, hiding the light-theme focus ring; landscape details column). Fixed, along with the refinements |
+| Final build | 2 | pending | |
 
-**How the "keep the best" rule was applied to F1 and F2.** Neither reached
+**How the "keep the best" rule was applied to F1, F2 and F3.** None reached
 9.5 in 4 attempts. Their attempt-4 findings were defects that were already
 in the best-scoring versions (the reviewers found them later, not
 regressions), so the current code, which is the best version plus fixes for
@@ -103,10 +104,18 @@ commit each attempt reviewed.
   generated file is deleted. Renames are retried on EPERM/EBUSY.
 - **Renames** copy the images and move the photo's `details.json` text to the
   new name. `"hide": true` leaves a photo out but keeps its text.
-- **Stale-page guard.** `index.html` carries `<!-- sources: <hash> -->` for
-  `site.json`, `photos/details.json` and `page.js`, ignoring line endings and
-  BOM. `tools/check-site.mjs` (run in CI) fails if they changed without a
-  rebuild.
+- **Stale-page guard.** `index.html` carries per-file fingerprints
+  (`<!-- sources: site.json=… photos/details.json=… assets/js/page.js=…; … -->`),
+  ignoring line endings and BOM. `tools/check-site.mjs` fails and names the
+  file if one changed without a rebuild. CI and `npm run package` both run
+  it.
+- **Text-only rebuilds.** Every full build writes
+  `assets/gallery/gallery.json` (the gallery's photo records). When `photos/`
+  is completely empty, as on a fresh clone without the originals, the build
+  keeps the gallery from that record and applies `site.json` and `page.js`.
+  It does this only if the record matches the page and every image exists.
+  A `details.json` change can't be applied there: its old fingerprint is
+  kept, so the publish check flags it.
 - **`site.json` checks.**
   - Wrong types and unknown keys, including nested ones in about, contact,
     show and licensing, produce notes.
@@ -120,8 +129,10 @@ commit each attempt reviewed.
   in upper case only (`_IGP0042`, `_1000123`; `_old2024` is hidden).
 - **Layout settings.** `page.js` holds one-line `ROW` and `LAYOUT` settings
   that the build reads, along with `partition()` itself, matched by braces.
-  The build uses them to compute `sizes` for the first two photos. A unit
-  test checks that `LAYOUT` matches `style.css`.
+  The build uses them to compute `sizes` for the eager photos: every photo in
+  the first row of the widest layout, from 2 up to 5, sampled at common
+  phone widths and then every 60 px. A unit test checks that `LAYOUT`
+  matches `style.css`.
 - **Damaged cache.** A damaged `.build-cache.json` is replaced, with a note.
 - **Tests.** Run with `npm test`, 32 in total:
   - 19 unit tests in `tools/build.test.mjs`.
@@ -141,6 +152,8 @@ commit each attempt reviewed.
     penalty.
 - **Thumbnails.**
   - Capped at 2× density and upgraded only near the viewport.
+  - The first row's photos are eager, with no fade-in; lazy photos fade in
+    over 0.3 s.
   - The first photos' `sizes` are frozen once they load.
   - Lazy images are `display: none` until the rows are laid out
     (`.is-justified`), so slow connections don't fetch them twice. A 3 s
@@ -156,8 +169,13 @@ commit each attempt reviewed.
 - **Layout.** The fit is computed from the dialog's own size and the bars
   float. The details reserve is measured in a detached clone.
   - Phones: a compact exposure line ("210mm · f/8 · 1/320s · ISO 160").
-  - Short screens: overlay controls on dark glass, shown only when they
-    actually overlap the photo, with the details in a side column.
+  - Short screens: overlay controls, with the details in a side column. The
+    column is a flex column with `margin-top: auto`, so it sits at the
+    bottom but scrolls from the top.
+  - Dark glass backings are computed from `fit`/`zoom`, not the live rect,
+    for the tools and the counter separately; more than 12 px of overlap on
+    both axes is needed. Over a photo, the focus ring is white with a dark
+    halo.
 - **Touch layer**, listening on the whole dialog with `touch-action: none`:
   - A tap toggles the controls and never closes the viewer.
   - Double-tap zooms.
@@ -165,7 +183,10 @@ commit each attempt reviewed.
   - A sideways swipe slides the neighbouring photo in.
   - A swipe down fades the background.
 - **Mouse.** Drag-to-pan when zoomed, with pointer capture and a grab
-  cursor; a drag never zooms out. The wheel pans.
+  cursor. A press that moves more than 4 px is never a click. The wheel pans.
+- **Keys.** Esc while zoomed is caught on keydown in the capture phase,
+  because Chrome can skip the cancelable `cancel` event on repeated Esc. I
+  and the Details button also zoom out first while zoomed.
 - **Robustness.**
   - A failed load keeps the preview: AVIF first, then the JPEG.
   - `show()` hides any half-slid neighbour.
@@ -173,13 +194,14 @@ commit each attempt reviewed.
 - **Shared links.** The head script, above the stylesheet, preloads
   `viewer.js` at high priority. A `deep-link` cover paints the viewer
   background until it opens.
-- **Checks.** `tools/dev/viewer-check.mjs` has 43 assertions, all passing.
+- **Checks.** `tools/dev/viewer-check.mjs` has 48 assertions, all passing.
+  They include three zoom/Esc rounds, a 5-size × 17-photo landscape column
+  sweep, and the backing test.
 
 ## 5. Next steps, in order
 
-1. Record F3 attempt 4 (its last).
-2. Final-build review of the whole site (up to 4 attempts), then update
-   `README.md` and this file.
+1. Final-build review attempts 2 to 4, as needed. Then update `README.md`
+   and this file.
 
 ## 6. Working on this repo
 
@@ -200,7 +222,7 @@ npx http-server -p 8123 -c-1 -s . &           # serve
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs [url]` | 43 pass/fail viewer assertions (close paths, rotation, landscape phone, zoom, drag, races, touch, failed loads, reduced motion) |
+| `viewer-check.mjs [url]` | 48 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
 | `anchor-check.mjs` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [url] [--throttle]` | image requests per device and size, including a rotation step; flags wasted, aborted, soft or oversized files |
 | `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |

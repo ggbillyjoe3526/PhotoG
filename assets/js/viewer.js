@@ -83,12 +83,12 @@
       '<div class="viewer-top">' +
         '<div class="viewer-tools">' +
           '<button type="button" class="viewer-btn" data-action="close" aria-label="Close viewer" title="Close (Esc)">' + ICONS.close + '</button>' +
-          '<button type="button" class="viewer-btn" data-action="info" aria-pressed="true" aria-controls="viewer-info" aria-label="Photo details" title="Details (I)">' + ICONS.info + '</button>' +
+          '<button type="button" class="viewer-btn" data-action="info" aria-pressed="true" aria-controls="viewer-info" aria-label="Details" title="Details (I)">' + ICONS.info + '</button>' +
           '<button type="button" class="viewer-btn" data-action="zoom" aria-pressed="false" aria-label="Zoom to full resolution" title="Zoom (Z)">' + ICONS.zoom + '</button>' +
         '</div>' +
         '<p class="viewer-count">' +
           '<button type="button" class="viewer-btn" data-action="prev" aria-label="Previous photo">' + ICONS.prev + '</button>' +
-          '<span class="viewer-pos"><strong class="viewer-index">01</strong><span class="sep" aria-hidden="true">/</span><span class="viewer-total">' + pad(total) + '</span></span>' +
+          '<span class="viewer-pos"><strong class="viewer-index">01</strong><span class="sep" aria-hidden="true">/</span><span class="visually-hidden"> of </span><span class="viewer-total">' + pad(total) + '</span></span>' +
           '<button type="button" class="viewer-btn" data-action="next" aria-label="Next photo">' + ICONS.next + '</button>' +
         '</p>' +
       '</div>' +
@@ -98,7 +98,7 @@
         '<button type="button" class="viewer-side prev" data-action="prev" aria-label="Previous photo" title="Previous (←)">' + ICONS.prev + '</button>' +
         '<button type="button" class="viewer-side next" data-action="next" aria-label="Next photo" title="Next (→)">' + ICONS.next + '</button>' +
       '</div>' +
-      '<div class="viewer-info" id="viewer-info" role="region" aria-label="Photo details">' +
+      '<div class="viewer-info" id="viewer-info" role="region" aria-label="About this photo">' +
         '<div class="viewer-text">' +
           '<h2 class="viewer-title"></h2>' +
           '<p class="viewer-meta"></p>' +
@@ -122,6 +122,8 @@
     var exifEl = q('.viewer-exif');
     var statusEl = q('[aria-live]');
     var infoButton = q('[data-action="info"]');
+    var toolsGroup = q('.viewer-tools');
+    var countGroup = q('.viewer-count');
     var zoomButton = q('[data-action="zoom"]');
     // An invisible copy of the details panel, used to measure every photo's
     // details without touching the visible one.
@@ -174,7 +176,7 @@
       var max = 0;
       for (var i = 0; i < total; i++) {
         renderInfo(photos[i], measure);
-        max = Math.max(max, measure.offsetHeight);
+        max = Math.max(max, Math.ceil(measure.getBoundingClientRect().height)); // not rounded down
       }
       infoReserve = { width: width, height: max };
       return max;
@@ -198,7 +200,8 @@
         // details become a column on the right (most photos are limited by
         // the height here, so the column costs them nothing).
         var column = infoVisible() && !immersive ? info.offsetWidth : 0;
-        return { W: W, H: H, t: safe.t, b: safe.b, l: side + safe.l, r: side + safe.r + column };
+        // (The column already pads itself for the right-hand safe area.)
+        return { W: W, H: H, t: safe.t, b: safe.b, l: side + safe.l, r: side + (column ? column : safe.r) };
       }
       var t = immersive ? safe.t : top.offsetHeight;
       var b = t; // no details: the photo is centred on the screen
@@ -234,8 +237,8 @@
       }
       // A photo within a few pixels of the edges goes all the way, rather
       // than leaving thin slivers of background.
-      if (availW - w > 0 && availW - w < 6 && w < p.width) w = Math.floor(availW);
-      if (availH - h > 0 && availH - h < 6 && h < p.height) h = Math.floor(availH);
+      if (availW - w > 0 && availW - w <= 8 && w < p.width) w = Math.floor(availW);
+      if (availH - h > 0 && availH - h <= 8 && h < p.height) h = Math.floor(availH);
       return {
         x: Math.round(box.l + (availW - w) / 2),
         y: Math.round(box.t + (availH - h) / 2),
@@ -271,11 +274,27 @@
       });
     }
 
-    /** Controls get a backing only where they float over the photo. */
+    /** Where the photo is on screen (zoomed: where it is zooming to). */
+    function photoRect() {
+      if (!fit) return null;
+      var x = zoom ? zoom.x : fit.x;
+      var y = zoom ? zoom.y : fit.y;
+      var s = zoom ? zoom.s : 1;
+      return { left: x, top: y, right: x + fit.w * s, bottom: y + fit.h * s };
+    }
+
+    /** Controls get a dark backing only where they float over the photo
+     *  (the counter and the buttons each on their own; a sliver of overlap at
+     *  a photo's edge doesn't count). */
     function updateOverlap() {
-      var f = frame.getBoundingClientRect();
-      var bar = top.getBoundingClientRect();
-      dialog.classList.toggle('is-overlapping', !!zoom || (f.top < bar.bottom - 4 && f.bottom > bar.top));
+      var r = photoRect();
+      [toolsGroup, countGroup].forEach(function (el) {
+        var b = el.getBoundingClientRect();
+        var over = !!r && b.width > 0 &&
+          Math.min(b.right, r.right) - Math.max(b.left, r.left) > 12 &&
+          Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > 12;
+        el.classList.toggle('is-over-photo', over);
+      });
     }
 
     /** A details panel that overflows can scroll (with a fade) and take focus. */
@@ -380,6 +399,7 @@
       frame.style.setProperty('--tint', photo.tint || 'transparent');
       frame.classList.remove('is-loaded', 'is-slow');
       if (full) { full.remove(); full = null; } // before refit, which resizes `full`
+      fullFailed = false;
       refit(false);
 
       // Instant preview from the thumbnail already on screen, if loaded.
@@ -458,7 +478,7 @@
         }
         clearTimeout(slowTimer);
         frame.classList.remove('is-slow');
-        if (full === picture) { full.remove(); full = null; }
+        if (full === picture) { full.remove(); full = null; fullFailed = true; updateZoomButton(); }
       }, { once: true });
     }
 
@@ -541,9 +561,8 @@
 
     /** Reset everything once the dialog has closed; focus the photo's tile. */
     function cleanup(i) {
-      root.classList.remove('viewer-open');
       galleryApi.gallery.style.width = '';
-      dialog.classList.remove('is-closing', 'is-zoomed', 'is-pulling', 'is-dismissing');
+      dialog.classList.remove('is-closing', 'is-zoomed', 'is-pulling', 'is-dismissing', 'is-instant');
       dialog.style.removeProperty('--fade');
       hidePeek();
       root.classList.remove('viewer-open');
@@ -669,7 +688,9 @@
       return widest / (fit.w * dpr());
     }
 
-    function canZoom() { return zoomScale() > 1.15; }
+    // Nothing to zoom into once the full-size file has failed to load.
+    function canZoom() { return !fullFailed && zoomScale() > 1.15; }
+    var fullFailed = false;
 
     function updateZoomButton() {
       var ok = current >= 0 && canZoom();
@@ -696,6 +717,7 @@
       var transform = 'translate(' + (zoom.x - fit.x) + 'px, ' + (zoom.y - fit.y) + 'px) scale(' + zoom.s + ')';
       frame.style.transition = animate && !reducedMotion() ? 'transform 0.3s ' + EASE : 'none';
       frame.style.transform = transform;
+      updateOverlap();
     }
 
     /** Zoom in around (px, py): to full resolution, or to `scale` if given
@@ -752,25 +774,30 @@
     // zooms out); the wheel or a trackpad pans too.
     var mouseDrag = null;
     var mouseMoved = false;
+    var mouseDown = null; // any mouse press: a press that moves isn't a click
     stage.addEventListener('pointerdown', function (event) {
-      if (event.pointerType !== 'mouse' || event.button !== 0 || !zoom) return;
-      mouseDrag = { x: event.clientX, y: event.clientY, zx: zoom.x, zy: zoom.y, id: event.pointerId };
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      mouseDown = { x: event.clientX, y: event.clientY, id: event.pointerId };
       mouseMoved = false;
+      if (!zoom) return;
+      mouseDrag = { x: event.clientX, y: event.clientY, zx: zoom.x, zy: zoom.y, id: event.pointerId };
       try { stage.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
       dialog.classList.add('is-grabbing');
       event.preventDefault();
     });
     stage.addEventListener('pointermove', function (event) {
+      if (mouseDown && event.pointerId === mouseDown.id &&
+          Math.abs(event.clientX - mouseDown.x) + Math.abs(event.clientY - mouseDown.y) > 4) mouseMoved = true;
       if (!mouseDrag || event.pointerId !== mouseDrag.id || !zoom) return;
       var dx = event.clientX - mouseDrag.x;
       var dy = event.clientY - mouseDrag.y;
-      if (Math.abs(dx) + Math.abs(dy) > 4) mouseMoved = true;
       var p = clampPan(mouseDrag.zx + dx, mouseDrag.zy + dy, zoom.s);
       zoom.x = p.x;
       zoom.y = p.y;
       applyZoom(false);
     });
     function endMouseDrag(event) {
+      if (mouseDown && event.pointerId === mouseDown.id) mouseDown = null;
       if (!mouseDrag || event.pointerId !== mouseDrag.id) return;
       mouseDrag = null;
       dialog.classList.remove('is-grabbing');
@@ -792,6 +819,12 @@
       if (current >= 0) refit(animate);
     }
     function toggleInfo() { setInfo(!infoVisible(), true); }
+    // I / the Details button: while zoomed (details out of sight) it first
+    // zooms back out, like Esc; the next press shows or hides the details.
+    function detailsKey() {
+      if (zoom) endZoom(true);
+      else toggleInfo();
+    }
     setInfo(store.get('viewer-info') !== 'off', false);
 
     function setImmersive(on) {
@@ -818,7 +851,7 @@
         if (name === 'prev') go(-1);
         else if (name === 'next') go(1);
         else if (name === 'close') close();
-        else if (name === 'info') toggleInfo();
+        else if (name === 'info') detailsKey();
         else if (name === 'zoom') toggleZoom();
         return;
       }
@@ -828,6 +861,16 @@
       else if (zoom) endZoom(true);
       else if (event.target === stage) close(); // the empty area around the photo
     });
+
+    // Esc while zoomed zooms out. Caught on keydown, before the dialog's own
+    // Esc handling: browsers don't always send a cancelable "cancel" event
+    // for repeated presses, and the dialog would close instead.
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape' || !dialog.open || !zoom || closing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      endZoom(true);
+    }, true);
 
     dialog.addEventListener('cancel', function (event) {
       event.preventDefault(); // Esc: zoom out first, then close through history
@@ -846,7 +889,7 @@
         case 'Home': if (!zoom) go(-current); break;
         case 'End': if (!zoom) go(total - 1 - current); break;
         case 'i':
-        case 'I': if (!zoom) toggleInfo(); break;
+        case 'I': detailsKey(); break;
         case 'z':
         case 'Z': toggleZoom(); break;
         default: return;
@@ -859,8 +902,7 @@
       new ResizeObserver(function () {
         if (!dialog.open || closing) return;
         endZoom(false);
-        infoReserve.width = 0;
-        refit(false);
+        refit(false); // (the details are re-measured only when the width changes)
       }).observe(dialog);
     }
 
@@ -1003,14 +1045,26 @@
       zoom.s = s;
       zoom.x = mx - (pinch.mx - pinch.x) * (s / pinch.s);
       zoom.y = my - (pinch.my - pinch.y) * (s / pinch.s);
+      pinch.lastX = mx;
+      pinch.lastY = my;
       applyZoom(false);
     }
 
     function endPinch() {
+      var mid = pinch && pinch.lastX != null ? { x: pinch.lastX, y: pinch.lastY } : null;
       pinch = null;
       suppressNextClick();
       if (zoom.s < 1.05) { endZoom(true); return; }
-      zoom.s = Math.min(zoom.s, maxPinch());
+      var max = maxPinch();
+      if (zoom.s > max) {
+        // Pinched past the limit: spring back around the point between the
+        // fingers, so what was under them stays there.
+        if (mid) {
+          zoom.x = mid.x - (mid.x - zoom.x) * (max / zoom.s);
+          zoom.y = mid.y - (mid.y - zoom.y) * (max / zoom.s);
+        }
+        zoom.s = max;
+      }
       var c = clampPan(zoom.x, zoom.y, zoom.s);
       zoom.x = c.x;
       zoom.y = c.y;
@@ -1100,7 +1154,7 @@
         tapTimer = setTimeout(function () {
           lastTap = null;
           setImmersive(!dialog.classList.contains('is-immersive'));
-        }, 260);
+        }, 300);
         return;
       }
       suppressNextClick();
@@ -1125,12 +1179,17 @@
 
     /* ------------------------------------------------- deep link on load */
     var initial = indexFromHash();
-    root.classList.remove('deep-link'); // the viewer opens now (or the link was stale)
     if (initial >= 0) {
+      // Opened from a shared link: the viewer appears at once over the
+      // cover (no fade in, which would show the gallery through it).
+      dialog.classList.add('is-instant');
       open(initial);
+      root.classList.remove('deep-link');
       // The browser's jump to #photo-… can take focus away; give it back.
       requestAnimationFrame(focusDialog);
       window.addEventListener('load', focusDialog, { once: true });
+    } else {
+      root.classList.remove('deep-link'); // a stale link: show the gallery
     }
   }
 

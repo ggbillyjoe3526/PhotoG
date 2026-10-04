@@ -26,6 +26,12 @@ You can also open `index.html` straight from the folder. `npm run build:force`
 re-encodes every photo. `npm test` checks the build itself; it also runs
 before every automatic publish.
 
+Your originals stay on your computer (they aren't in git). On another
+computer, or a fresh copy of the site, `photos/` is empty: `npm run build`
+then keeps the gallery exactly as it is and only applies changes to
+`site.json`. Changes to photos, or to their text in `photos/details.json`,
+need the computer with your originals.
+
 ## 1. Add your photographs
 
 1. Export your photos as JPEGs. Use the full resolution, or about 3000–4000 px
@@ -47,7 +53,8 @@ seconds.
   anything is encoded. If one is damaged or didn't finish copying, the build
   stops, the website stays as it was, and it tells you which file and why in
   plain words.
-- An empty `photos/` folder never empties a published gallery.
+- An empty `photos/` folder never empties a published gallery (it only
+  updates the text, see above).
 - It only ever deletes files it created itself.
 - Two photos whose names clash after the numbers are removed (`03-dunes.jpg`
   and `07-dunes.jpg`) stop the build until you rename one, so their links and
@@ -178,6 +185,10 @@ placeholder text like "Your Name" is still there.
 The page layout itself is `index.html`. Don't edit inside the
 `<!-- build:… -->` markers: the build rewrites those parts every time it runs.
 
+**Your own icon.** The browser-tab icon is `assets/favicon.svg` and the icon
+for phone home screens is `assets/apple-touch-icon.png` (180×180 px, no
+transparency). Replace either file with your own under the same name.
+
 ## 4. Publish
 
 The website is `index.html` plus the `assets/` folder; nothing else belongs on
@@ -256,7 +267,7 @@ long-term caching is safe: a changed photo always gets a new name.
     the browser's Back button closes the viewer.
 - **Fast loading.** Each screen gets an AVIF image at the right size, with a
   JPEG fallback. An image is only fetched again when a bigger version is
-  needed (larger thumbnails, the viewer, zoom). Only the first two photos load
+  needed (larger thumbnails, the viewer, zoom). Only the first row loads
   straight away, and each thumbnail shows its average colour while it loads.
   The page doesn't jump around while it loads.
 - **Accessible.** Everything works with a keyboard, focus is always visible,

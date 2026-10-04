@@ -82,18 +82,64 @@ test('a damaged JPEG stops the build; published images are kept', async () => {
 });
 
 test('an empty photos folder never empties a published gallery', () => {
-  const before = html();
+  const galleryOf = (h) => /<!-- build:gallery -->[\s\S]*<!-- \/build:gallery -->/.exec(h)[0];
   const hold = path.join(root, 'hold');
   mkdirSync(hold);
-  for (const f of readdirSync(path.join(root, 'photos')).filter((f) => f.endsWith('.jpg'))) {
+  const originals = readdirSync(path.join(root, 'photos')).filter((f) => f.endsWith('.jpg'));
+  for (const f of originals) {
     cpSync(path.join(root, 'photos', f), path.join(hold, f));
     rmSync(path.join(root, 'photos', f));
   }
-  const r = build();
-  assert.equal(r.code, 1);
-  assert.match(r.out, /Nothing was changed/);
-  assert.equal(html(), before);
-  for (const f of readdirSync(hold)) cpSync(path.join(hold, f), path.join(root, 'photos', f));
+  const site = path.join(root, 'site.json');
+  const siteText = readFileSync(site, 'utf8');
+  const detailsText = readFileSync(path.join(root, 'photos', 'details.json'), 'utf8');
+  try {
+    // 1. No originals at all (a fresh copy elsewhere): the text is updated,
+    //    the gallery kept exactly as it is.
+    const before = html();
+    writeFileSync(site, siteText.replace(/"name": "[^"]*"/, '"name": "Text Only"'));
+    let r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /gallery of 2 photos was kept/);
+    assert.match(html(), /Text Only/);
+    assert.equal(galleryOf(html()), galleryOf(before));
+    assert.equal(run('check-site.mjs').code, 0);
+
+    // 2. details.json edited there: can't be applied; the publish check says so.
+    const d = details();
+    d.red.title = 'Needs the originals';
+    setDetails(d);
+    r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /details\.json has changed/);
+    assert.doesNotMatch(html(), /Needs the originals/);
+    r = run('check-site.mjs');
+    assert.equal(r.code, 1);
+    assert.match(r.out, /photos\/details\.json changed/);
+    writeFileSync(path.join(root, 'photos', 'details.json'), detailsText);
+
+    // 3. Something hidden in photos/, or no record of the gallery: refused.
+    const now = html();
+    writeFileSync(path.join(root, 'photos', '_draft.jpg'), readFileSync(path.join(hold, originals[0])));
+    r = build();
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Nothing was changed/);
+    rmSync(path.join(root, 'photos', '_draft.jpg'));
+    const manifest = path.join(root, 'assets', 'gallery', 'gallery.json');
+    const kept = readFileSync(manifest);
+    rmSync(manifest);
+    r = build();
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Nothing was changed/);
+    assert.equal(html(), now);
+    writeFileSync(manifest, kept);
+  } finally {
+    writeFileSync(site, siteText);
+    writeFileSync(path.join(root, 'photos', 'details.json'), detailsText);
+    for (const f of readdirSync(hold)) cpSync(path.join(hold, f), path.join(root, 'photos', f));
+    rmSync(hold, { recursive: true, force: true });
+  }
+  assert.equal(build().code, 0);
 });
 
 test('a rebuild with nothing changed encodes nothing and leaves index.html alone', () => {
