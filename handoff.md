@@ -59,91 +59,99 @@ highest-scoring version, which is why every attempt is committed.
 | Feature | Attempt | Score | Result | Commit reviewed |
 |---|---|---|---|---|
 | F1: build pipeline (`tools/build.mjs`, `site.json`) | 1 | **7.4** | Total rework, done | before `b04945e` |
-| F1 | 2 | running | | `da882f4` |
-| F2: page shell, gallery grid, theme | 1 | **8.5** | Refined, all findings addressed | before `b04945e` |
-| F2 | 2 | running | | `da882f4` |
-| F3: full-screen viewer | 1 | running | | `37d4411` (viewer code unchanged since) |
+| F1 | 2 | **8.7** | Refined: every finding addressed | `da882f4` |
+| F1 | 3 | running | | `3fcdf92` |
+| F2: page shell, gallery grid, theme | 1 | **8.5** | Refined | before `b04945e` |
+| F2 | 2 | **9.2** | Refined: every finding addressed | `da882f4` |
+| F2 | 3 | running | | `3fcdf92` |
+| F3: full-screen viewer | 1 | **7.7** | Total rework, done (now `viewer.js`) | `37d4411` |
+| F3 | 2 | running | | `7bc60c9` |
 | Final build | n/a | n/a | Not started | n/a |
 
-Critic reports are written to the session scratchpad. Copy the scores into
-this table when they arrive.
+Each feature has 4 attempts at most. If a feature hasn't reached 9.5 after
+attempt 4, keep the best-scoring commit.
 
 ## 4. Status by feature
 
-### 4.1 F1: build pipeline
+### 4.1 F1: build pipeline (attempt 3 under review)
 
-All attempt-1 findings were fixed in the rework, which is described in commit
-`b04945e`. In `da882f4` the build also gained:
-- **`site.json`.** The owner's name, tagline, description, url, about (lede,
-  text, facts) and contact (intro, email, links) live here. The build
-  validates the file, escapes everything, rejects non-http(s) links and bad
-  emails with a note, warns about placeholder text, and renders the
-  `build:meta|brand|about|contact|footer` regions.
-- **Inlining.** `assets/js/layout.js` is inlined after the gallery as a
-  `<script>`, with `</script` escaped.
-- **New `sizes` estimate.** `min(100vw, calc(ar*1.1 * clamp(220px, calc(200px
-  + 9vw), 440px)))`. It is only used by the 4 eager photos and when JS is off.
-- **Captions describe links.** Each tile link gets `aria-describedby`
-  pointing at its visible caption.
+The attempt-2 fixes are in commit `3fcdf92`; its message lists them all.
 
-### 4.2 F2: gallery page (all attempt-1 findings addressed in `da882f4`)
+Highlights:
+- **Hidden files.** `_` hides a photo, except camera names such as `_DSC1234`.
+  Hidden files and folders are listed.
+- **Clashing names.** Two photos whose names match once the order number is
+  removed stop the build.
+- **Damaged files.** Damaged JPEGs are rejected with plain-language messages,
+  while harmless libjpeg quirks are let through.
+- **Privacy.** `site.json` `"show"` sets the location level (full, city,
+  country or none) and the date level (day, month, year or none). The default
+  is city and month.
+- **Film scans.** `details.json` accepts per-field camera overrides, and
+  `exif: false` keeps the typed values.
+- **Rebuilds.** Fresh clones reuse existing images, and unchanged originals
+  aren't re-read.
+- **Images.** The width ladder is 320–3200, at 72 dpi with ColorSpace sRGB.
+- **Link previews.** `og:image` is written only when `url` is set. Added
+  JSON-LD and a landscape cover by default.
+- **Tests.** Unit tests run with `npm test`.
+- **Publishing.** `npm run package` copies the site to `dist/` with a
+  `_headers` file, and the GitHub Pages workflow publishes only `index.html`
+  and `assets/`.
 
-- **Row layout is inlined.** It runs before first paint, so there's no opacity
-  gate. Lazy images that haven't chosen a file get exact `sizes`. Eager images
-  keep the HTML estimate, because the preload scanner may already have fetched
-  them. After loading, a photo is only ever upgraded, never downloaded smaller.
-  `tools/dev/download-check.mjs` reports no waste on desktop, tablet or phone,
-  in S, M and L, throttled or not. A saved L preference upgrades eager photos
-  once, which is by design.
-- **Rows re-tuned.** The base row height is `clamp(220, 200 + 0.09w, 440)`.
-  The size factors are S 0.6 (0.45 on phones), M 1 and L 1.75. Costs penalise
-  rows below 0.8× or above 1.3× the target, and slivers under 64/80px.
-- **Contrast.** Frame numbers use `--fg-muted` and titles `--fg`. Phones show
-  numbers only, except at L.
-- **Navigation.** `id="top"` is on `<body>`. Size changes keep the photo
-  nearest the screen centre in place, to within 1px.
-- **Semantics.** The brand is the h1 and "Selected work" an h2. Section numbers
-  are `aria-hidden`.
-- **Controls appear without shifting.** They are revealed with `.is-ready`,
-  using visibility, so there's no shift and no dead controls if `main.js`
-  fails.
-- **Theme.** The saved choice is cleared when the system changes to match it.
-- **Touch, layout and type.** 44px touch targets under `pointer: coarse`.
-  2200px max width via `--page-gutter`. Labels scale up to 13px. Rows at S sit
-  closer together.
-- **About and Contact.** Labels are baseline-aligned with the first line of
-  text.
-- **Fonts and icons.** Geist Mono is preloaded. The favicon has a dark tile,
-  and there's a 180px `apple-touch-icon`.
+### 4.2 F2: gallery page (attempt 3 under review)
 
-### 4.3 F3: viewer (built and self-tested, review running)
+- **One inlined script.** `assets/js/page.js` holds the theme toggle, the row
+  engine, resizing and S/M/L. The build inlines it after the gallery, so
+  everything works at first paint and nothing depends on another script.
+  `main.js` and `layout.js` were removed.
+- **Rows.** Neighbouring rows are penalised for uneven heights (JUMP 0.8). The
+  minimum tile width scales with the size factor.
+- **Thumbnails.** Capped at 2× density, and upgraded only within a screen of
+  the viewport (IntersectionObserver).
+- **One row definition.** `var ROW = {…}` in `page.js` is read by the build,
+  which writes `--row-h` on the gallery and the `sizes` estimates.
+- **Fixes.**
+  - The size underline uses `text-decoration`, so it works on touch screens
+    and in forced colours.
+  - The contact-link arrow shows on touch screens.
+  - Captions have right padding.
+  - Theme switches happen instantly.
+  - Titles underline on hover.
+  - Size labels are "S: small thumbnails" and so on.
 
-The viewer is `initViewer()` in `assets/js/main.js` plus the "viewer" section
-of `style.css`.
+### 4.3 F3: viewer (attempt 2 under review)
 
-**What it does:**
-- `<dialog>` with zoom from the thumbnail on open and back to it on close
-  (WAAPI, turned off for reduced motion).
-- Instant low-res preview, then the full-resolution image fades in; a loading
-  bar appears after 450ms.
-- Preloads the previous and next photos.
-- Navigation: ←/→, Home/End, **I** toggles details, Esc. Swipe sideways to
-  change photo, swipe down to close, tap to hide the controls. Pinch zoom
-  works.
-- Deep links `#photo-<slug>`. The browser's Back button closes the viewer.
-- Focus returns to the tile on close. Live region announcements.
+The viewer was rewritten as `assets/js/viewer.js`, which starts itself from
+`window.Portfolio`. Its CSS is the "viewer" section of `style.css`.
 
-**Self-tested with** `tools/dev/viewer-check.mjs`: all pass.
+- **Layout.** The fit is computed from the dialog's own size. The bars float
+  over the photo.
+  - On short screens (≤500px tall) the controls overlay the photo and the
+    details become a side column, `min(260px, 30vw)`.
+  - Immersive mode enlarges the photo and hides the controls.
+- **Close.** `history.scrollRestoration` is manual while the viewer is open,
+  and `teardown` scrolls one frame later. Back→Forward races are aborted
+  cleanly.
+- **Zoom.** Click, double-tap, Z or the button shows the photo at full
+  resolution, with pan by pointer, drag or arrow keys. Esc zooms out first.
+  Pinch zoom sets `is-pinched`, which allows one-finger pan and asks for
+  sharper files.
+- **Loading.** The picture is attached only after its `sizes` is set. When
+  moving to the next photo, the old picture is removed before the resize.
+  While flicking through, there is a 200ms wait unless the photo is
+  preloaded. Neighbours are preloaded only after a photo has been shown for
+  300ms.
+- **Checks.** `tools/dev/viewer-check.mjs` has 30 pass/fail assertions, all
+  passing.
 
 ## 5. Next steps, in order
 
-1. Read the three running critic reports (F1 attempt 2, F2 attempt 2, F3
-   attempt 1). Each one either reaches 9.5 or goes back for rework, up to 4
-   attempts. Keep the best-scoring version of each.
+1. When the running reviews (F1 attempt 3, F2 attempt 3, F3 attempt 2)
+   report, record the scores above. Refine anything below 9.5 and re-submit,
+   up to 4 attempts.
 2. Final-build review of the whole site, then update `README.md` and this
    file.
-3. Optional, raised during reviews but not requested: a 1:1 zoom in the viewer
-   for inspecting detail.
 
 ## 6. Working on this repo
 
@@ -163,9 +171,11 @@ into a local `node_modules`, or `npm i -D playwright`.
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs` | keyboard, history, deep links, swipe, tap |
+| `viewer-check.mjs` | 30 pass/fail viewer assertions (close paths, rotation, landscape phone, zoom, races, touch, reduced motion) |
+| `anchor-check.mjs` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [--throttle]` | image requests per device and size; flags wasted, aborted or soft thumbnails |
-| `row-sim.mjs` | row partition across widths for S/M/L |
+| `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |
+| `npm test` | unit tests for the build (`tools/build.test.mjs`) |
 
 **Build edge cases to re-test after F1 changes:**
 - A Lightroom XMP file containing `&amp;` and `&#xA;`.
@@ -191,9 +201,11 @@ into a local `node_modules`, or `npm i -D playwright`.
 ```
 index.html             page shell; all <!-- build:… --> regions are generated
 assets/css/style.css   tokens (light/dark) at top; gallery; about/contact; viewer
-site.json              owner details -> build:meta|brand|about|contact|footer
-assets/js/layout.js    row engine; inlined after the gallery by the build
-assets/js/main.js      theme toggle, resize + S/M/L (via window.PhotoLayout), viewer
+site.json              owner details + privacy ("show") -> build:meta|brand|about|contact|footer
+assets/js/page.js      theme, row engine, resize, S/M/L; inlined after the gallery by the build
+assets/js/viewer.js    the viewer (deferred; starts from window.Portfolio)
+tools/package.mjs      copies index.html + assets/ to dist/ (+ _headers)
+.github/workflows/pages.yml  publishes only index.html + assets/ to GitHub Pages
 assets/gallery/        generated AVIF+JPEG: <slug>-<hash(source+settings)>-<width>.<ext>
 assets/fonts/          Geist + Geist Mono (OFL)
 photos/                originals (git-ignored), details.json + README.txt (tracked)
