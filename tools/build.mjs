@@ -44,8 +44,8 @@ const PAGE_JS_FILE = path.join(ROOT, 'assets', 'js', 'page.js');
 const DETAILS_FILE = path.join(SRC_DIR, 'details.json');
 const CACHE_FILE = path.join(SRC_DIR, '.build-cache.json');
 // What the gallery holds, so the text can be rebuilt on a computer without
-// the originals (photos/ isn't in git). Published, but holds nothing the
-// page doesn't show.
+// the originals (photos/ isn't in git). In git with assets/, but not
+// published, and never holding more than the page shows.
 const MANIFEST_FILE = path.join(OUT_DIR, 'gallery.json');
 
 /** Image encoding. Changing anything here re-encodes every photo and gives
@@ -717,16 +717,18 @@ async function inspectPhoto(entry, ctx) {
   const own = [];
   const meta = await readMetadata(buffer ?? sourcePath, entry.fileName, own);
   let text = describe(meta, entry.override, entry.names, show);
-  const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? new Date().getFullYear();
+  // The capture year, if the photo has a date. (An undated photo's notice
+  // has no year: the current one would change every January, and with it
+  // the images' key.)
+  const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? null;
   const artist = text.rights.artist || site.name;
   // (Whether the embedded rights use the site owner's name from site.json.)
   text.ownerName = !text.rights.artist || !text.rights.copyright;
   text.rights = {
     artist,
-    copyright: text.rights.copyright || `© ${year} ${artist}`,
+    copyright: text.rights.copyright || (year ? `© ${year} ${artist}` : `© ${artist}`),
     statement: site.licensePage || site.license,
   };
-  text.year = year;
   const rightsKey = hash(JSON.stringify([text.rights.artist, text.rights.copyright, text.rights.statement]), 8);
   if (seen && seen.hash === sourceHash && seen.rights && seen.rights !== rightsKey) ctx.rightsChanged.push(entry.fileName);
   cache.files[entry.fileName] = { size: info.size, mtimeMs: info.mtimeMs, hash: sourceHash, rights: rightsKey };
@@ -756,7 +758,7 @@ async function inspectPhoto(entry, ctx) {
       const blank = (v) => !v || (typeof v === 'object' && Object.values(v).every((x) => x === '' || x == null));
       if (old && !blank(old) && blank(here)) {
         entry.override = old;
-        text = { ...describe(meta, entry.override, entry.names, show), rights: text.rights, year: text.year, ownerName: text.ownerName };
+        text = { ...describe(meta, entry.override, entry.names, show), rights: text.rights, ownerName: text.ownerName };
         ctx.moves.set(known.slug, entry.names.slug);
         notes.push(`details.json: the text for "${known.slug}" moved to "${entry.names.slug}" with the renamed photo.`);
       }
@@ -986,7 +988,7 @@ function renderStats(photos) {
 
 /* ------------------------------------------------------------ site.json */
 
-const PLACEHOLDER = /\bYour Name\b|example\.com|City, Country|Client One/;
+const PLACEHOLDER = /\bYour Name\b|example\.com|City, Country|Client One|^Replace this|^https?:\/\/(?:www\.)?(?:instagram|linkedin|facebook|x|twitter|threads|behance|flickr|vimeo|youtube)\.com\/?$/i;
 
 /** Read site.json, check it, and normalise it. Problems become notes. */
 async function loadSite(notes) {
@@ -1155,7 +1157,6 @@ function renderMeta(site, cover, photos = []) {
   // Who made each photo and how to license it (search engines show this as
   // "Licensable" on image results). Needs absolute addresses, so only with url.
   if (site.url) {
-    const year = new Date().getFullYear();
     for (const p of photos) {
       const image = {
         '@type': 'ImageObject',
@@ -1163,7 +1164,7 @@ function renderMeta(site, cover, photos = []) {
         name: p.title || undefined,
         creator: { '@type': 'Person', name: p.artist || site.name },
         creditText: p.artist || site.name,
-        copyrightNotice: p.copyright || `© ${/\b(1[89]\d\d|2\d{3})\b/.exec(p.date)?.[1] ?? year} ${site.name}`,
+        copyrightNotice: p.copyright || `© ${p.artist || site.name}`,
       };
       if (site.license) image.license = site.license;
       if (site.licensePage) image.acquireLicensePage = site.licensePage;
@@ -1368,8 +1369,23 @@ async function main() {
   }
 }
 
+/** The stylesheet and viewer script, linked with a version (a hash of their
+ *  content), so hosts can cache them for good: a change gets a new address. */
+export const VERSIONED_ASSETS = ['assets/css/style.css', 'assets/js/viewer.js'];
+export function versionedRefs(html) {
+  return [...html.matchAll(/(assets\/(?:css\/style\.css|js\/viewer\.js))(?:\?v=([0-9a-f]*))?/g)].map((m) => ({ file: m[1], v: m[2] ?? '' }));
+}
+async function versionAssets(html) {
+  for (const file of VERSIONED_ASSETS) {
+    const v = fileFingerprint(await readFile(path.join(ROOT, file), 'utf8').catch(() => ''));
+    html = html.replace(new RegExp(`${file.replace(/[./]/g, '\\$&')}(\\?v=[0-9a-f]*)?`, 'g'), `${file}?v=${v}`);
+  }
+  return html;
+}
+
 /** Write every generated region of index.html. Returns whether it changed. */
 async function writeSite(html, { site, photos, pageJs, cover, prints }) {
+  html = await versionAssets(html);
   html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
   html = replaceRegion(html, 'meta', `${renderMeta(site, cover, photos).trimEnd()}\n    ${fingerprintComment(prints)}\n    `);
   html = replaceRegion(html, 'brand', renderBrand(site));
@@ -1379,6 +1395,18 @@ async function writeSite(html, { site, photos, pageJs, cover, prints }) {
   html = replaceRegion(html, 'contact', renderContact(site));
   html = replaceRegion(html, 'footer', renderFooter(site));
   return writeIfChanged(HTML_FILE, html);
+}
+
+/** Record the gallery for text-only rebuilds. Holds only what the page
+ *  shows (plus file names); not published (pages.yml, package.mjs). */
+async function writeManifest({ site, photos, cover, show }) {
+  await writeIfChanged(MANIFEST_FILE, JSON.stringify({
+    note: 'Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don\'t edit. Not published.',
+    cover: cover?.id ?? '',
+    show,
+    rights: { name: site.name, license: site.license, licensePage: site.licensePage },
+    photos: photos.map(({ file, status, year, ...p }) => p),
+  }, null, 1) + '\n');
 }
 
 /** The gallery as last built, if index.html still shows exactly it and all
@@ -1457,6 +1485,11 @@ async function textOnlyBuild(html, kept, { site, pageJs, notes, started }) {
   }
   const photos = shown.photos;
   const cover = photos.find((p) => p.id === kept.cover?.id) ?? photos[0];
+  // The record follows what the page now shows (hidden text leaves it too).
+  // Its rights stay as they are in the image files.
+  if (shown.exact) {
+    await writeManifest({ site: { ...site, name: kept.rights?.name ?? site.name, license: kept.rights?.license ?? site.license, licensePage: kept.rights?.licensePage ?? site.licensePage }, photos, cover, show: site.show });
+  }
   const changed = await writeSite(html, { site, photos, pageJs, cover, prints });
   console.log(
     `No originals in photos/, so the gallery of ${kept.photos.length} photos was kept as it is and only the text ` +
@@ -1527,9 +1560,18 @@ async function build(notes, started) {
     }
   }
 
+  // Said now, before minutes of encoding, as well as in the notes at the end.
   if (ctx.rightsChanged.length) {
-    notes.push(`${ctx.rightsChanged.length} photo${ctx.rightsChanged.length === 1 ? ' was' : 's were'} encoded again because the name, copyright or licence ` +
-      `embedded in the image files changed (site.json "name" or "licensing"): ${list(ctx.rightsChanged)}.`);
+    const why = `${ctx.rightsChanged.length} photo${ctx.rightsChanged.length === 1 ? ' is' : 's are'} encoded again because the name, copyright or licence ` +
+      `embedded in the image files changed (site.json "name" or "licensing"): ${list(ctx.rightsChanged)}.`;
+    console.log(`  ${why}`);
+    notes.push(why);
+  }
+  if (!failures.length && /\bYour Name\b/i.test(site.name) && plans.some((pl) => pl.status === 'encode' && pl.text.ownerName)) {
+    const warn = 'site.json "name" is still "Your Name", and it is written into the image files of photos that have no ' +
+      'Artist/Copyright of their own. Set your name first (Ctrl+C to stop now): changing it later means encoding those photos again.';
+    console.log(`  Note: ${warn}`);
+    notes.push(warn);
   }
 
   // Step 2, in parallel: encode what needs it.
@@ -1586,13 +1628,7 @@ async function build(notes, started) {
   cover ??= photos.find((p) => p.width / p.height >= 1.2) ?? photos[0];
 
   // The gallery's record (for text-only rebuilds), then the page itself.
-  await writeIfChanged(MANIFEST_FILE, JSON.stringify({
-    note: 'Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don\'t edit.',
-    cover: cover?.id ?? '',
-    show: site.show,
-    rights: { name: site.name, license: site.license, licensePage: site.licensePage },
-    photos: photos.map(({ file, status, ...p }) => p),
-  }, null, 1) + '\n');
+  await writeManifest({ site, photos, cover, show: site.show });
   const htmlChanged = await writeSite(html, { site, photos, pageJs, cover, prints: await currentFingerprints() });
 
   // Only now, with the new index.html safely written, remove generated files

@@ -411,6 +411,28 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   await ctx.close();
 }
 
+// 10c. A details panel that scrolls can be scrolled back up by touch (a
+//      downward drag on it scrolls; it doesn't start swipe-down-to-close).
+{
+  const { ctx, page } = await newPage({ viewport: { width: 568, height: 320 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await page.goto(base + '#photo-fog-ridge', { waitUntil: 'networkidle' });
+  await settle(page, 400);
+  const box = await page.evaluate(() => { const r = document.querySelector('.viewer-info').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, scrollable: document.querySelector('.viewer-info').classList.contains('is-scrollable') }; });
+  const cdp = await ctx.newCDPSession(page);
+  const drag = async (dy) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x, y: box.y }] });
+    for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x, y: box.y + dy * i / 8 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await settle(page, 350);
+  };
+  await drag(-120);
+  const down = await page.evaluate(() => document.querySelector('.viewer-info').scrollTop);
+  await drag(140);
+  const after = await page.evaluate(() => ({ top: document.querySelector('.viewer-info').scrollTop, open: document.querySelector('.viewer').open, pulling: document.querySelector('.viewer').classList.contains('is-pulling') }));
+  check('touch: a scrolling details panel scrolls down and back up (and doesn\'t close the viewer)', box.scrollable && down > 0 && after.top === 0 && after.open && !after.pulling, JSON.stringify({ scrollable: box.scrollable, down, ...after }));
+  await ctx.close();
+}
+
 // 11. Dark backings only where the controls are really over the photo: open
 //     a tile from the very top of the screen (the open animation passes
 //     under the bar) and check once it has settled.
@@ -425,6 +447,28 @@ for (const [w, h] of [[390, 664], [390, 844]]) {
   await page.keyboard.press('z'); await settle(page, 500);
   const zoomedOver = await page.evaluate(() => !!document.querySelector('.viewer-tools .is-over-photo'));
   check('…and they appear when the zoomed photo is under the buttons', zoomedOver);
+  await ctx.close();
+}
+
+// 12. A click before viewer.js has arrived waits for the viewer (it doesn't
+//     leave the page for the bare JPEG); if viewer.js fails, it follows the link.
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await page.route(/viewer\.js/, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await page.click('#photo-dunes .tile-link');
+  await settle(page, 2500);
+  const r = await page.evaluate(() => ({ url: location.pathname, open: document.querySelector('dialog.viewer')?.open, hash: location.hash }));
+  check('a click while viewer.js is still loading opens the viewer once it arrives', r.open && r.hash === '#photo-dunes' && !/\.jpg$/.test(r.url), JSON.stringify(r));
+  await ctx.close();
+}
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1280, height: 800 } });
+  await page.route(/viewer\.js/, (route) => route.abort());
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await settle(page, 300);
+  await Promise.all([page.waitForURL(/\.jpg$/, { timeout: 5000 }).catch(() => {}), page.click('#photo-dunes .tile-link')]);
+  check('…and if viewer.js can\'t load, the click opens the image itself', /\.jpg$/.test(page.url()), page.url().split('/').pop());
   await ctx.close();
 }
 

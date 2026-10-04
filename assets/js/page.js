@@ -481,7 +481,33 @@
   var gallery = initGallery();
 
   // Shared with viewer.js.
-  window.Portfolio = { gallery: gallery && gallery.gallery, tiles: gallery ? gallery.tiles : [], store: store, partition: partition };
+  var shared = window.Portfolio = {
+    gallery: gallery && gallery.gallery, tiles: gallery ? gallery.tiles : [], store: store, partition: partition,
+    viewerReady: false, heldLink: null,
+  };
+
+  // A photo clicked before viewer.js has arrived (slow connection): wait for
+  // the viewer to open it, rather than leaving the page for the bare JPEG.
+  // If the viewer can't load (or takes over 3 s), follow the link after all.
+  if (shared.gallery) {
+    var holdTimer = 0;
+    var follow = function () {
+      var link = shared.heldLink;
+      shared.heldLink = null;
+      if (link) window.location.href = link.href;
+    };
+    shared.gallery.addEventListener('click', function (event) {
+      var link = event.target.closest && event.target.closest('.tile-link');
+      if (!link || shared.viewerReady || root.classList.contains('no-viewer')) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      shared.heldLink = link;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(follow, 3000);
+    });
+    // Set by the viewer <script>'s onerror in index.html.
+    window.addEventListener('portfolio:no-viewer', follow);
+  }
 
   document.addEventListener('DOMContentLoaded', function () {
     var year = document.querySelector('[data-year]');

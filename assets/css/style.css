@@ -1319,7 +1319,9 @@ html.viewer-open {
    themes, so they read on any picture. Only where they actually overlap it
    (viewer.js sets is-over-photo on each round button and on the counter). */
 .viewer-tools .viewer-btn.is-over-photo,
-.viewer-count.is-over-photo {
+.viewer-count.is-over-photo,
+.viewer-count .viewer-btn.is-over-photo,
+.viewer-pos.is-over-photo {
   --fg: #f2f2f0;
   --fg-muted: #d5d5d1;
   --fg-faint: #a9a9a5;
@@ -1331,7 +1333,8 @@ html.viewer-open {
 /* Over a photo the focus ring is white with a dark halo, so it shows on
    light and dark pictures alike. */
 .viewer-tools .viewer-btn.is-over-photo:focus-visible,
-.viewer-count.is-over-photo .viewer-btn:focus-visible {
+.viewer-count.is-over-photo .viewer-btn:focus-visible,
+.viewer-count .viewer-btn.is-over-photo:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
   box-shadow: 0 0 0 5px rgb(0 0 0 / 0.55);
@@ -1346,7 +1349,14 @@ html.viewer-open {
   margin-left: -10px;
 }
 
-.viewer-count.is-over-photo .sep {
+/* Only the numbers over the photo (the pill is mostly beside it). */
+.viewer-pos.is-over-photo {
+  padding: 6px 10px;
+  border-radius: 16px;
+}
+
+.viewer-count.is-over-photo .sep,
+.viewer-pos.is-over-photo .sep {
   color: var(--fg-muted);
 }
 

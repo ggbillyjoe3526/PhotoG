@@ -72,7 +72,8 @@ highest-scoring version, which is why every attempt is committed.
 | F3 | 4 (last) | **8.9** | Ties the best F3 score. Two blockers (repeated Esc closed instead of zooming out; landscape details column overflowing upward) and refinements, all fixed after the loop |
 | Final build (whole site) | 1 | **8.8** | Two blockers (dark control backings stuck on, hiding the light-theme focus ring; landscape details column). Fixed, along with the refinements |
 | Final build | 2 | **8.8** | Three blockers (zoomed photo under the landscape details column; text-only rebuild ignoring `show`; embedded copyright keeping the placeholder name). All fixed, along with the refinements |
-| Final build | 3 | pending | |
+| Final build | 3 | **9.0** | Three blockers (details panel couldn't be scrolled back up by touch; `gallery.json` kept hidden locations after a text-only build; undated photos re-encoded every January). All fixed, along with most refinements |
+| Final build | 4 (last) | pending | |
 
 **How the "keep the best" rule was applied to F1, F2 and F3.** None reached
 9.5 in 4 attempts. Their attempt-4 findings were defects that were already
@@ -120,11 +121,19 @@ commit each attempt reviewed.
   and a new name or licence that is embedded in the image files. For those,
   the old fingerprint is kept with a note, so the publish check blocks.
   The manifest records `show`, the rights source (name and licence) and,
-  per photo, `ownerName`.
+  per photo, `ownerName`. It never holds more than the page shows: after
+  an exact `show` reduction it is rewritten, and `year` isn't stored. It is
+  in git with `assets/`, but `pages.yml` and `package.mjs` don't publish it.
 - **Embedded rights.** The cache key is
   `hash(sourceHash + ENCODE_KEY + rightsKey)`, where `rightsKey` covers the
   artist, copyright and licence statement. Changing the site name re-encodes
-  the photos that use it, with a note.
+  the photos that use it, with a note printed before encoding. Undated photos
+  get "© Name" with no year, so the key doesn't change every January. Before
+  encoding, the build warns if the name is still "Your Name".
+- **Versioned links.** `style.css` and `viewer.js` are linked with
+  `?v=<content hash>`, including the deep-link preload. check-site verifies
+  the hashes, and `_headers` caches `/assets/css/*` and `/assets/js/*` for
+  good.
 - **`site.json` checks.**
   - Wrong types and unknown keys, including nested ones in about, contact,
     show and licensing, produce notes.
@@ -143,9 +152,9 @@ commit each attempt reviewed.
   phone widths and then every 60 px. A unit test checks that `LAYOUT`
   matches `style.css`.
 - **Damaged cache.** A damaged `.build-cache.json` is replaced, with a note.
-- **Tests.** Run with `npm test`, 34 in total:
+- **Tests.** Run with `npm test`, 35 in total:
   - 20 unit tests in `tools/build.test.mjs`.
-  - 14 integration tests in `tools/build.integration.test.mjs`, running the
+  - 15 integration tests in `tools/build.integration.test.mjs`, running the
     real build in a temporary copy via `PHOTOG_ROOT`. They cover large
     cut-off and damaged JPEGs, a quirk with and without damage, 16-bit
     colour, rename, hide, a damaged cache, the stale-page check, text-only
@@ -184,7 +193,8 @@ commit each attempt reviewed.
     column is a flex column with `margin-top: auto`, so it sits at the
     bottom but scrolls from the top.
   - Dark glass backings are computed from `fit`/`zoom`, not the live rect,
-    for each round button and for the counter pill; more than 12 px of
+    for each round button, and for the counter as one pill when half of it
+    or more is over the photo (otherwise per part); more than 12 px of
     overlap on both axes is needed. Zooming hides the side column. Over a photo, the focus ring is white with a dark
     halo.
 - **Touch layer**, listening on the whole dialog with `touch-action: none`:
@@ -207,9 +217,21 @@ commit each attempt reviewed.
   background until it opens.
 - **Focus.** If the focused Zoom button hides (per photo) or a side arrow
   hides (while zoomed), focus moves to Details or Zoom.
-- **Checks.** `tools/dev/viewer-check.mjs` has 49 assertions, all passing.
-  They include three zoom/Esc rounds, a 5-size × 17-photo landscape column
-  sweep, landscape zoom panning, and the backing test.
+- **Touch in the details panel.** When the panel scrolls, vertical drags in
+  it scroll the panel instead of starting swipe-down-to-close. The panel
+  only counts as scrollable when the overflow is 12 px or more; anything
+  less falls within its bottom padding.
+- **Early clicks.** `page.js` holds a tile click until `viewer.js` arrives
+  (`Portfolio.heldLink`, opened at init). It follows the link if the
+  script's `onerror` fires (`no-viewer`) or after 3 s.
+- **Checks.** `tools/dev/viewer-check.mjs` has 52 assertions, all passing.
+  They include:
+  - three zoom/Esc rounds
+  - a 5-size × 17-photo landscape column sweep
+  - landscape zoom panning
+  - touch scrolling of the panel
+  - the backing test
+  - early clicks with `viewer.js` delayed or blocked
 
 ## 5. Next steps, in order
 
@@ -235,11 +257,11 @@ npx http-server -p 8123 -c-1 -s . &           # serve
 |---|---|
 | `run-critic.sh <prompt> <report>` | runs the critic (Opus 5.5, xhigh) |
 | `screenshots.mjs <url> <outDir>` | main states incl. S/M/L, no-JS, 2560px; logs CLS and console errors |
-| `viewer-check.mjs [url]` | 49 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
+| `viewer-check.mjs [url]` | 52 pass/fail viewer assertions (close paths, rotation, landscape phones, zoom/Esc, drag, races, touch, failed loads, control backings, reduced motion) |
 | `anchor-check.mjs` | S/M/L keeps the centred photo in place |
 | `download-check.mjs [url] [--throttle]` | image requests per device and size, including a rotation step; flags wasted, aborted, soft or oversized files |
 | `row-sim.mjs` | row partition across widths for S/M/L (uses the real `partition()` from `page.js`) |
-| `npm test` | 34 unit and integration tests for the build |
+| `npm test` | 35 unit and integration tests for the build |
 
 **Build edge cases to re-test after F1 changes:**
 - A Lightroom XMP file containing `&amp;` and `&#xA;`.

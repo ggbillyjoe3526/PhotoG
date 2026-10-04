@@ -20,10 +20,16 @@ await mkdir(DIST, { recursive: true });
 await cp(path.join(ROOT, 'index.html'), path.join(DIST, 'index.html'));
 await cp(path.join(ROOT, 'assets'), path.join(DIST, 'assets'), {
   recursive: true,
-  filter: (src) => !/\.tmp(-\d+)?$/.test(src),
+  // Not the build's leftovers, nor its record of the gallery (not needed online).
+  filter: (src) => !/\.tmp(-\d+)?$/.test(src) && !src.endsWith(path.join('gallery', 'gallery.json')),
 });
 await writeFile(path.join(DIST, '_headers'), [
   '/assets/gallery/*',
+  '  Cache-Control: public, max-age=31536000, immutable',
+  // The stylesheet and viewer script are linked with ?v=<content hash>.
+  '/assets/css/*',
+  '  Cache-Control: public, max-age=31536000, immutable',
+  '/assets/js/*',
   '  Cache-Control: public, max-age=31536000, immutable',
   '/assets/fonts/*',
   '  Cache-Control: public, max-age=604800', // a week: font names don't change

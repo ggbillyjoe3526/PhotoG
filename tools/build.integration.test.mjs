@@ -53,6 +53,9 @@ test('builds a gallery', () => {
   assert.equal(tiles(), 2);
   assert.ok(readdirSync(path.join(root, 'assets', 'gallery')).some((f) => /^red-[0-9a-f]{8}-320\.avif$/.test(f)));
   assert.ok(existsSync(path.join(root, 'photos', 'details.json')));
+  // The sample text the site ships with is named, field by field.
+  assert.match(r.out, /sample text in "name"/);
+  assert.match(r.out, /"about\.text\[0\]"|"contact\.links\./);
 });
 
 test('clashing names stop the build and change nothing', () => {
@@ -158,6 +161,36 @@ test('an empty photos folder never empties a published gallery', () => {
     assert.match(r.out, /Nothing was changed/);
     assert.equal(html(), now);
     writeFileSync(manifest, kept);
+  } finally {
+    writeFileSync(site, siteText);
+    writeFileSync(path.join(root, 'photos', 'details.json'), detailsText);
+    for (const f of readdirSync(hold)) cpSync(path.join(hold, f), path.join(root, 'photos', f));
+    rmSync(hold, { recursive: true, force: true });
+  }
+  assert.equal(build().code, 0);
+});
+
+test('hiding locations without the originals takes them out of the gallery record too', () => {
+  const site = path.join(root, 'site.json');
+  const siteText = readFileSync(site, 'utf8');
+  const detailsText = readFileSync(path.join(root, 'photos', 'details.json'), 'utf8');
+  const d = details();
+  d.red.location = 'Secret Cove';
+  setDetails(d);
+  assert.equal(build().code, 0);
+  const manifest = path.join(root, 'assets', 'gallery', 'gallery.json');
+  assert.match(readFileSync(manifest, 'utf8'), /Secret Cove/);
+  const hold = path.join(root, 'hold2');
+  mkdirSync(hold);
+  const originals = readdirSync(path.join(root, 'photos')).filter((f) => f.endsWith('.jpg'));
+  for (const f of originals) { cpSync(path.join(root, 'photos', f), path.join(hold, f)); rmSync(path.join(root, 'photos', f)); }
+  try {
+    writeFileSync(site, siteText.replace(/("show":\s*)\{[^}]*\}/, '$1{ "location": "none", "date": "month" }'));
+    const r = build();
+    assert.equal(r.code, 0, r.out);
+    assert.doesNotMatch(html(), /Secret Cove/);
+    assert.doesNotMatch(readFileSync(manifest, 'utf8'), /Secret Cove/);
+    assert.equal(run('check-site.mjs').code, 0);
   } finally {
     writeFileSync(site, siteText);
     writeFileSync(path.join(root, 'photos', 'details.json'), detailsText);
@@ -324,6 +357,11 @@ test('changing the owner\'s name re-encodes photos that carry it', async () => {
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /encoded again because the name, copyright or licence/);
     assert.equal(await artistOf(), 'Jane Doe');
+    // An undated photo's notice has no year (it would change every January).
+    const f = readdirSync(path.join(root, 'assets', 'gallery')).find((x) => /^blue-[0-9a-f]{8}-320\.jpg$/.test(x));
+    const exifr = (await import('exifr')).default;
+    // (EXIF text is plain ASCII, so © is written as (C).)
+    assert.match((await exifr.parse(path.join(root, 'assets', 'gallery', f), { ifd0: true }))?.Copyright, /^(©|\(C\)) Jane Doe$/);
   } finally {
     writeFileSync(site, siteText);
   }

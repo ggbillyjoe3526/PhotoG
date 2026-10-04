@@ -1,5 +1,5 @@
 {
- "note": "Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don't edit.",
+ "note": "Written by tools/build.mjs: the gallery as last built, so the text can be rebuilt without the originals. Don't edit. Not published.",
  "cover": "ridgelines",
  "show": {
   "location": "city",
@@ -28,7 +28,6 @@
     "focal35": "315mm"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "ridgelines",
@@ -84,7 +83,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "fog-ridge",
@@ -134,7 +132,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "horizon",
@@ -190,7 +187,6 @@
     "iso": "ISO 200"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "dunes",
@@ -246,7 +242,6 @@
     "iso": "ISO 200"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "shadow-study",
@@ -300,7 +295,6 @@
     "focal35": "84mm"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "night-lights",
@@ -356,7 +350,6 @@
     "iso": "ISO 400"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "pines",
@@ -406,7 +399,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "sun-disc",
@@ -462,7 +454,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "panorama",
@@ -519,7 +510,6 @@
     "focal35": "35mm"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "window-light",
@@ -572,7 +562,6 @@
     "iso": "ISO 64"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "snowfield",
@@ -628,7 +617,6 @@
     "iso": "ISO 50"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "tide",
@@ -678,7 +666,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "concrete",
@@ -734,7 +721,6 @@
     "iso": "ISO 1600"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "aurora",
@@ -791,7 +777,6 @@
     "focal35": "24mm"
    },
    "ownerName": true,
-   "year": 2023,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "canyon",
@@ -841,7 +826,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "lake",
@@ -897,7 +881,6 @@
     "iso": "ISO 100"
    },
    "ownerName": true,
-   "year": 2024,
    "artist": "Your Name",
    "copyright": "Sample image - replace with your own work",
    "id": "salt-flat",

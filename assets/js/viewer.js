@@ -150,6 +150,12 @@
     var zoom = null;          // { s, x, y } while zoomed
     var infoReserve = { width: 0, height: 0 };
     var fullFailed = false;   // the sharp file failed to load (no zoom then)
+    // Touch gestures (see "touch" below).
+    var touches = {};         // fingers on the screen: pointerId -> { x, y }
+    var drag = null;          // one-finger gesture
+    var pinch = null;         // two-finger gesture
+    var suppressClick = false;
+    var lastPointerType = '';
     var teardownOptions = null; // how to close once Back has been handled
 
     /* ----------------------------------------------------------- helpers */
@@ -213,6 +219,7 @@
         // space anyway (a landscape photo on a phone is limited by width).
         b = reserveForInfo(W);
         var cap = Math.round(H * 0.26);
+        if (b > cap && b - cap <= 40) cap = b; // a little over: shrink the photo, don't scroll the text
         if (b > cap && current >= 0) {
           var p = photos[current];
           var photoH = Math.min(W - side * 2 - safe.l - safe.r, p.width) * p.height / p.width;
@@ -290,21 +297,29 @@
      *  a photo's edge doesn't count). */
     function updateOverlap() {
       var r = photoRect();
-      var isOver = function (el) {
+      var isOver = function (el, share) {
         var b = el.getBoundingClientRect();
-        return !!r && b.width > 0 &&
-          Math.min(b.right, r.right) - Math.max(b.left, r.left) > 12 &&
+        var w = !!r && Math.min(b.right, r.right) - Math.max(b.left, r.left);
+        return !!r && b.width > 0 && w > Math.max(12, b.width * (share || 0)) &&
           Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) > 12;
       };
       // Each round button on its own; the counter as one pill.
       each(toolsGroup.querySelectorAll('.viewer-btn'), function (b) { b.classList.toggle('is-over-photo', isOver(b)); });
-      countGroup.classList.toggle('is-over-photo', isOver(countGroup));
+      // The counter: one pill when it is mostly over the photo; otherwise
+      // only its parts that are (an arrow, the numbers) get a backing.
+      var pill = isOver(countGroup, 0.5);
+      countGroup.classList.toggle('is-over-photo', pill);
+      each(countGroup.querySelectorAll('.viewer-btn, .viewer-pos'), function (part) {
+        part.classList.toggle('is-over-photo', !pill && isOver(part));
+      });
     }
 
     /** A details panel that overflows can scroll (with a fade) and take focus. */
     function updateInfoScroll() {
       info.classList.remove('is-scrollable'); // measure without its extra padding
-      var scrollable = info.scrollHeight > info.clientHeight + 1;
+      // A few pixels over only cut into the bottom padding (14px or more):
+      // nothing is hidden, so no scrolling and no fade.
+      var scrollable = info.scrollHeight > info.clientHeight + 12;
       info.classList.toggle('is-scrollable', scrollable);
       if (scrollable) info.tabIndex = 0;
       else info.removeAttribute('tabindex');
@@ -392,6 +407,7 @@
       each(dialog.querySelectorAll('[data-action="prev"]'), function (b) { b.setAttribute('aria-disabled', String(i === 0)); });
       each(dialog.querySelectorAll('[data-action="next"]'), function (b) { b.setAttribute('aria-disabled', String(i === total - 1)); });
       renderInfo(photo);
+      info.scrollTop = 0;
       var position = 'Photo ' + (i + 1) + ' of ' + total;
       dialog.setAttribute('aria-label', photo.title ? photo.title + ', ' + position.toLowerCase() : position);
       // On open the dialog's own name is announced; announce changes after that.
@@ -920,11 +936,6 @@
     //   double-tap or pinch: zoom around your fingers; drag to pan when zoomed
     //   swipe sideways: next / previous, with the neighbour sliding in alongside
     //   swipe down: close (the background fades as you pull)
-    var touches = {};   // fingers on the screen: pointerId -> { x, y }
-    var drag = null;    // one-finger gesture
-    var pinch = null;   // two-finger gesture
-    var suppressClick = false;
-    var lastPointerType = '';
     var tapTimer = 0;
     var lastTap = null;
     var peek = q('.viewer-peek');
@@ -1096,6 +1107,9 @@
       drag = {
         x: event.clientX, y: event.clientY, t: Date.now(), axis: null, id: event.pointerId,
         zx: zoom && zoom.x, zy: zoom && zoom.y,
+        // In a details panel that scrolls, up and down scroll it (sideways
+        // still changes photo).
+        inPanel: info.classList.contains('is-scrollable') && info.contains(event.target),
       };
     });
 
@@ -1108,7 +1122,7 @@
       var dy = event.clientY - drag.y;
       if (!drag.axis) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        drag.axis = zoom ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'x' : dy > 0 ? 'down' : 'none';
+        drag.axis = zoom ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'x' : dy > 0 && !drag.inPanel ? 'down' : 'none';
         clearTimeout(tapTimer);
         frame.classList.add('is-dragging');
         if (drag.axis === 'down') dialog.classList.add('is-pulling');
@@ -1184,6 +1198,11 @@
     dialog.addEventListener('pointerup', function (e) { endTouch(e, false); });
     dialog.addEventListener('pointercancel', function (e) { endTouch(e, true); });
 
+    // A photo clicked while this script was still loading (see page.js).
+    galleryApi.viewerReady = true;
+    var held = galleryApi.heldLink;
+    galleryApi.heldLink = null;
+
     /* ------------------------------------------------- deep link on load */
     var initial = indexFromHash();
     if (initial >= 0) {
@@ -1197,9 +1216,10 @@
       window.addEventListener('load', focusDialog, { once: true });
     } else {
       root.classList.remove('deep-link'); // a stale link: show the gallery
+      if (held && tiles.indexOf(held.closest('.tile')) >= 0) open(tiles.indexOf(held.closest('.tile')), { push: true, zoom: true });
     }
   }
 
   var page = window.Portfolio;
-  if (page && page.gallery) init({ gallery: page.gallery, tiles: page.tiles }, page.store);
+  if (page && page.gallery) init(page, page.store);
 })();

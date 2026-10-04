@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { FINGERPRINT_FILES, fileFingerprint, readFingerprints } from './build.mjs';
+import { FINGERPRINT_FILES, fileFingerprint, readFingerprints, versionedRefs } from './build.mjs';
 
 const ROOT = process.env.PHOTOG_ROOT ? path.resolve(process.env.PHOTOG_ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -30,10 +30,16 @@ else {
   }
 }
 
+// The stylesheet and viewer script carry a version: it must match them.
+const stale = versionedRefs(html).filter((r) => r.v !== fileFingerprint(read(r.file)));
+if (stale.length) {
+  problems.push(`index.html links an old version of ${[...new Set(stale.map((r) => r.file))].join(' and ')}. Run \`npm run build\` and commit index.html.`);
+}
+
 const refs = new Set();
 for (const m of html.matchAll(/(?:src|href|srcset)="([^"]+)"/g)) {
   for (const part of m[1].split(',')) {
-    const url = part.trim().split(/\s+/)[0];
+    const url = part.trim().split(/\s+/)[0].replace(/[?#].*$/, '');
     if (url.startsWith('assets/')) refs.add(url);
   }
 }

@@ -39,6 +39,7 @@ jobs:
           cp index.html _site/
           cp -r assets _site/
           find _site -name '*.tmp*' -delete
+          rm -f _site/assets/gallery/gallery.json   # the build's record, not needed online
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
