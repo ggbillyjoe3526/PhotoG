@@ -36,13 +36,17 @@ before every automatic publish.
 3. Run `npm run build`.
 
 The build makes resized AVIF and JPEG copies in `assets/gallery/` and writes
-the gallery into `index.html`. Photos that haven't changed are skipped, and so
-are photos you've only renamed, so rebuilds are quick.
+the gallery into `index.html`. The first build takes a while: roughly 25
+seconds per 24-megapixel photo on a typical four-core laptop. After that,
+photos that haven't changed are skipped, and so are photos you've only
+renamed (their text in `details.json` moves with them), so rebuilds take
+seconds.
 
 **The build is careful with your site.**
-- If any photo can't be read, it stops and the website stays as it was. That
-  covers a damaged file or one that didn't finish copying, and it tells you
-  which file and why in plain words.
+- Every new or changed photo is checked pixel by pixel, at full size, before
+  anything is encoded. If one is damaged or didn't finish copying, the build
+  stops, the website stays as it was, and it tells you which file and why in
+  plain words.
 - An empty `photos/` folder never empties a published gallery.
 - It only ever deletes files it created itself.
 - Two photos whose names clash after the numbers are removed (`03-dunes.jpg`
@@ -58,8 +62,9 @@ with numbers: `01-harbour.jpg`, `02-dunes.jpg`… The number isn't shown on the
 site and isn't part of the photo's link.
 
 **Hide a photo without deleting it.** Start its file name with an underscore,
-for example `_maybe-later.jpg`. Names cameras give their files, such as
-`_DSC1234.jpg`, aren't hidden. Every build lists what it hid.
+for example `_maybe-later.jpg`, or add `"hide": true` to its entry in
+`photos/details.json`. Names cameras give their files, such as `_DSC1234.jpg`,
+aren't hidden by the underscore. Every build lists what it hid.
 
 **Privacy.**
 - **Image files.** The resized copies have all metadata removed, including GPS
@@ -107,9 +112,11 @@ sensitive location. Then run `npm run build` again:
 ```
 
 - Camera data can be typed too: `camera`, `lens`, `focal`, `aperture`,
-  `shutter` and `iso`. Plain numbers are fine: `"35"` shows as 35mm, `"5.6"`
-  as f/5.6, `"125"` as 1/125s and `"400"` as ISO 400. Any of them can be `"-"`
+  `shutter` and `iso`. Plain numbers are fine: `"35"` shows as 35mm, `"24-70"`
+  as 24–70mm, `"5.6"` as f/5.6, `"125"` as 1/125s and `"400"` as ISO 400. For
+  long exposures add the unit: `"30s"` is 30 seconds. Any of them can be `"-"`
   to hide it.
+- `"hide": true` leaves the photo out of the gallery; its text is kept.
 - `"exif": false` ignores everything the file says about the camera. Use it
   for film scans, where the file describes the scanner, and type the real
   camera and lens instead.
@@ -194,8 +201,23 @@ not part of the website.
 1. Add, remove or rename photos in `photos/`, or edit `site.json` or
    `photos/details.json`.
 2. Run `npm run build` and check it with `npm run preview`.
-3. Commit `index.html`, `assets/`, `site.json` and `photos/details.json`, then
-   push. The workflow tests the site and publishes it.
+3. Commit and push. In a terminal:
+
+   ```bash
+   git add index.html assets site.json photos/details.json
+   git commit -m "Add new photos"
+   git push
+   ```
+
+   In GitHub Desktop, tick the same files, write a summary, click *Commit to
+   main* and then *Push origin*. The workflow tests the site and publishes it
+   a minute or two later.
+
+Always build on your computer before pushing. If you edit `site.json` or
+`photos/details.json` on github.com, the page isn't rebuilt (the build needs
+your originals, which aren't on GitHub). The workflow notices and stops with
+"index.html is out of date" instead of publishing a page that doesn't match;
+pull the change, run `npm run build`, and push again.
 
 ### A public repository and your privacy
 
@@ -233,9 +255,10 @@ long-term caching is safe: a changed photo always gets a new name.
   - Every photo has its own shareable link (`yoursite.com/#photo-horizon`), and
     the browser's Back button closes the viewer.
 - **Fast loading.** Each screen gets an AVIF image at the right size, with a
-  JPEG fallback, and no photo is ever downloaded twice. Only the first few
-  photos load straight away, and each thumbnail shows its average colour while
-  it loads. The page doesn't jump around while it loads.
+  JPEG fallback. An image is only fetched again when a bigger version is
+  needed (larger thumbnails, the viewer, zoom). Only the first two photos load
+  straight away, and each thumbnail shows its average colour while it loads.
+  The page doesn't jump around while it loads.
 - **Accessible.** Everything works with a keyboard, focus is always visible,
   screen readers get alt text and announcements, and animations are turned off
   for visitors who ask their system for reduced motion.
@@ -250,11 +273,11 @@ index.html            the page layout (build:… regions are generated)
 assets/css/style.css  all styling; colours are tokens at the top
 assets/js/page.js     theme, gallery rows, S/M/L (inlined into index.html by the build)
 assets/js/viewer.js   the full-screen viewer
-assets/fonts/         Geist and Geist Mono (SIL Open Font License, see OFL.txt)
+assets/fonts/         Geist and Geist Mono, Latin and Latin Extended (SIL Open Font License, see OFL.txt)
 assets/gallery/       generated by the build (don't edit or add files here)
 photos/               your originals (kept private) + details.json
-tools/build.mjs       the build (photos + site.json -> index.html); tests in build.test.mjs
+tools/build.mjs       the build (photos + site.json -> index.html); tests in build*.test.mjs
 tools/package.mjs     copies the website into dist/ for publishing
-tools/check-site.mjs  checks every file index.html refers to exists
+tools/check-site.mjs  checks index.html is up to date and every file it refers to exists
 tools/dev/            development checks (not needed to run the site)
 ```

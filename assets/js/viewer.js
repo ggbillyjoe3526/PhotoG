@@ -98,7 +98,7 @@
         '<button type="button" class="viewer-side prev" data-action="prev" aria-label="Previous photo" title="Previous (←)">' + ICONS.prev + '</button>' +
         '<button type="button" class="viewer-side next" data-action="next" aria-label="Next photo" title="Next (→)">' + ICONS.next + '</button>' +
       '</div>' +
-      '<div class="viewer-info" id="viewer-info">' +
+      '<div class="viewer-info" id="viewer-info" role="region" aria-label="Photo details">' +
         '<div class="viewer-text">' +
           '<h2 class="viewer-title"></h2>' +
           '<p class="viewer-meta"></p>' +
@@ -123,6 +123,15 @@
     var statusEl = q('[aria-live]');
     var infoButton = q('[data-action="info"]');
     var zoomButton = q('[data-action="zoom"]');
+    // An invisible copy of the details panel, used to measure every photo's
+    // details without touching the visible one.
+    var measure = info.cloneNode(true);
+    measure.removeAttribute('id');
+    measure.removeAttribute('role');
+    measure.removeAttribute('aria-label');
+    measure.setAttribute('aria-hidden', 'true');
+    measure.classList.add('viewer-measure');
+    dialog.appendChild(measure);
 
     var current = -1;
     var full = null;          // the sharp <picture> for the current photo
@@ -164,10 +173,9 @@
       if (infoReserve.width === width) return infoReserve.height;
       var max = 0;
       for (var i = 0; i < total; i++) {
-        renderInfo(photos[i]);
-        max = Math.max(max, info.offsetHeight);
+        renderInfo(photos[i], measure);
+        max = Math.max(max, measure.offsetHeight);
       }
-      if (current >= 0) renderInfo(photos[current]);
       infoReserve = { width: width, height: max };
       return max;
     }
@@ -193,9 +201,19 @@
         return { W: W, H: H, t: safe.t, b: safe.b, l: side + safe.l, r: side + safe.r + column };
       }
       var t = immersive ? safe.t : top.offsetHeight;
-      // The details panel gets the room its tallest entry needs, but never
-      // more than about a quarter of the screen (a long caption then scrolls).
-      var b = immersive ? safe.b : infoVisible() ? Math.min(reserveForInfo(W), Math.round(H * 0.24)) : t;
+      var b = t; // no details: the photo is centred on the screen
+      if (!immersive && infoVisible()) {
+        // The details get the room their tallest entry needs, but at most
+        // about a quarter of the screen, unless the photo wouldn't use that
+        // space anyway (a landscape photo on a phone is limited by width).
+        b = reserveForInfo(W);
+        var cap = Math.round(H * 0.26);
+        if (b > cap && current >= 0) {
+          var p = photos[current];
+          var photoH = Math.min(W - side * 2 - safe.l - safe.r, p.width) * p.height / p.width;
+          b = Math.max(cap, Math.min(b, H - t - photoH));
+        }
+      }
       dialog.style.setProperty('--info-max', b + 'px');
       return { W: W, H: H, t: t, b: b, l: side + safe.l, r: side + safe.r };
     }
@@ -214,6 +232,10 @@
         w = Math.floor(Math.min(availW, p.width));
         h = Math.min(Math.round(w / ratio), Math.floor(availH));
       }
+      // A photo within a few pixels of the edges goes all the way, rather
+      // than leaving thin slivers of background.
+      if (availW - w > 0 && availW - w < 6 && w < p.width) w = Math.floor(availW);
+      if (availH - h > 0 && availH - h < 6 && h < p.height) h = Math.floor(availH);
       return {
         x: Math.round(box.l + (availW - w) / 2),
         y: Math.round(box.t + (availH - h) / 2),
@@ -249,6 +271,21 @@
       });
     }
 
+    /** Controls get a backing only where they float over the photo. */
+    function updateOverlap() {
+      var f = frame.getBoundingClientRect();
+      var bar = top.getBoundingClientRect();
+      dialog.classList.toggle('is-overlapping', !!zoom || (f.top < bar.bottom - 4 && f.bottom > bar.top));
+    }
+
+    /** A details panel that overflows can scroll (with a fade) and take focus. */
+    function updateInfoScroll() {
+      var scrollable = info.scrollHeight > info.clientHeight + 1;
+      info.classList.toggle('is-scrollable', scrollable);
+      if (scrollable) info.tabIndex = 0;
+      else info.removeAttribute('tabindex');
+    }
+
     function refit(animate) {
       if (current < 0) return;
       var before = frame.getBoundingClientRect();
@@ -257,6 +294,8 @@
       placeFrame(fitFor(current, box));
       setFullSizes(wantedWidth());
       updateZoomButton();
+      updateOverlap();
+      updateInfoScroll();
       if (animate && !zoom && !reducedMotion() && frame.animate && before.width) {
         var after = frame.getBoundingClientRect();
         frame.animate([
@@ -266,7 +305,12 @@
       }
     }
 
-    function renderInfo(photo) {
+    function renderInfo(photo, target) {
+      var root = target || info;
+      var titleEl = root.querySelector('.viewer-title');
+      var metaEl = root.querySelector('.viewer-meta');
+      var captionEl = root.querySelector('.viewer-caption');
+      var exifEl = root.querySelector('.viewer-exif');
       titleEl.textContent = photo.title || '';
       metaEl.textContent = '';
       [photo.location, photo.date].filter(Boolean).forEach(function (part, n) {
@@ -330,6 +374,7 @@
       statusEl.textContent = opening ? '' : position + (photo.title ? ': ' + photo.title : '');
 
       frame.getAnimations && frame.getAnimations().forEach(function (a) { a.cancel(); });
+      hidePeek();
       frame.style.transform = '';
       frame.style.opacity = '';
       frame.style.setProperty('--tint', photo.tint || 'transparent');
@@ -339,7 +384,18 @@
 
       // Instant preview from the thumbnail already on screen, if loaded.
       if (s.thumb) { preview.src = s.thumb; preview.hidden = false; }
-      else { preview.removeAttribute('src'); preview.hidden = true; }
+      else {
+        preview.removeAttribute('src');
+        preview.hidden = true;
+        // e.g. opened from a shared link before the thumbnail loaded: use it
+        // as soon as it arrives, if the sharp file hasn't beaten it.
+        var tileImg = tilePicture(i).querySelector('img');
+        tileImg.addEventListener('load', function () {
+          if (token !== loadToken || !full || !full.classList.contains('is-loading')) return;
+          preview.src = tileImg.currentSrc || tileImg.src;
+          preview.hidden = false;
+        }, { once: true });
+      }
 
       full = el('picture', 'viewer-full is-loading');
       var source = el('source');
@@ -391,7 +447,19 @@
         if (img.decode) img.decode().then(reveal, reveal);
         else reveal();
       }, { once: true });
-      img.addEventListener('error', reveal, { once: true });
+      // A file that fails: try the JPEG once (if the AVIF failed), otherwise
+      // keep the preview rather than show a broken image.
+      img.addEventListener('error', function onError() {
+        if (token !== loadToken) return;
+        if (source.parentNode) {
+          source.remove();
+          img.addEventListener('error', onError, { once: true });
+          return;
+        }
+        clearTimeout(slowTimer);
+        frame.classList.remove('is-slow');
+        if (full === picture) { full.remove(); full = null; }
+      }, { once: true });
     }
 
     function hashFor(i) { return '#' + tiles[i].id; }
@@ -442,10 +510,13 @@
           var from = thumbRect(i);
           var to = frame.getBoundingClientRect();
           if (from && to.width) {
-            frame.animate([
+            var source = tilePicture(i);
+            source.style.visibility = 'hidden'; // no second copy under the zooming photo
+            var grow = frame.animate([
               { transformOrigin: '0 0', transform: zoomBetween(from, to) },
               { transformOrigin: '0 0', transform: 'none' },
             ], { duration: 320, easing: EASE });
+            grow.onfinish = grow.oncancel = function () { source.style.visibility = ''; };
           }
         }
       } else {
@@ -489,6 +560,7 @@
       current = -1;
       fit = null;
       try { history.scrollRestoration = 'auto'; } catch (e) { /* old browsers */ }
+      if (tiles[i]) tilePicture(i).style.visibility = '';
       var link = tiles[i] && tiles[i].querySelector('.tile-link');
       if (link) link.focus({ preventScroll: true });
     }
@@ -501,6 +573,7 @@
         closeAnim.onfinish = closeAnim.oncancel = null;
         closeAnim.cancel();
       }
+      tiles.forEach(function (t, k) { tilePicture(k).style.visibility = ''; });
       closeAnim = null;
       closing = false;
       dialog.classList.remove('is-closing');
@@ -529,6 +602,7 @@
         var from = frame.getBoundingClientRect();
         if (!to || !from.width) { finish(); return; }
         dialog.classList.add('is-closing');
+        tilePicture(i).style.visibility = 'hidden';
         closeAnim = frame.animate([
           { transformOrigin: '0 0', transform: getComputedStyle(frame).transform === 'none' ? 'none' : getComputedStyle(frame).transform },
           { transformOrigin: '0 0', transform: zoomBetween(to, from) },
@@ -604,6 +678,7 @@
       zoomButton.hidden = !ok && !zoom;
       zoomButton.setAttribute('aria-pressed', String(!!zoom));
       zoomButton.setAttribute('aria-label', zoom ? 'Zoom out' : 'Zoom to full resolution');
+      zoomButton.title = zoom ? 'Zoom out (Z)' : 'Zoom (Z)';
     }
 
     function clampPan(x, y, s) {
@@ -623,17 +698,6 @@
       frame.style.transform = transform;
     }
 
-    /** Pan so the image point under (px, py) on screen is in view. */
-    function panFromPointer(px, py) {
-      var W = dialog.clientWidth;
-      var H = dialog.clientHeight;
-      var zw = fit.w * zoom.s;
-      var zh = fit.h * zoom.s;
-      var p = clampPan(-(px / W) * (zw - W), -(py / H) * (zh - H), zoom.s);
-      zoom.x = p.x;
-      zoom.y = p.y;
-    }
-
     /** Zoom in around (px, py): to full resolution, or to `scale` if given
      *  (touch double-tap zooms even when there's little extra detail). */
     function startZoom(px, py, scale) {
@@ -650,12 +714,13 @@
       setFullSizes(wantedWidth());
       applyZoom(true);
       updateZoomButton();
+      updateOverlap();
       announceZoom();
     }
 
     function announceZoom() {
       statusEl.textContent = zoom
-        ? 'Zoomed in. Move the pointer, drag or use the arrow keys to look around; press Z or Esc to zoom out.'
+        ? 'Zoomed in. Drag or use the arrow keys to look around; press Z or Esc to zoom out.'
         : 'Zoomed out.';
     }
 
@@ -666,6 +731,7 @@
       frame.style.transition = animate && !reducedMotion() ? 'transform 0.3s ' + EASE : 'none';
       frame.style.transform = '';
       updateZoomButton();
+      updateOverlap();
       if (animate) announceZoom();
     }
 
@@ -682,11 +748,41 @@
       applyZoom(false);
     }
 
-    stage.addEventListener('mousemove', function (event) {
-      if (!zoom) return;
-      panFromPointer(event.clientX, event.clientY);
+    // Mouse: drag a zoomed photo to look around (a click without dragging
+    // zooms out); the wheel or a trackpad pans too.
+    var mouseDrag = null;
+    var mouseMoved = false;
+    stage.addEventListener('pointerdown', function (event) {
+      if (event.pointerType !== 'mouse' || event.button !== 0 || !zoom) return;
+      mouseDrag = { x: event.clientX, y: event.clientY, zx: zoom.x, zy: zoom.y, id: event.pointerId };
+      mouseMoved = false;
+      try { stage.setPointerCapture(event.pointerId); } catch (e) { /* ignore */ }
+      dialog.classList.add('is-grabbing');
+      event.preventDefault();
+    });
+    stage.addEventListener('pointermove', function (event) {
+      if (!mouseDrag || event.pointerId !== mouseDrag.id || !zoom) return;
+      var dx = event.clientX - mouseDrag.x;
+      var dy = event.clientY - mouseDrag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) mouseMoved = true;
+      var p = clampPan(mouseDrag.zx + dx, mouseDrag.zy + dy, zoom.s);
+      zoom.x = p.x;
+      zoom.y = p.y;
       applyZoom(false);
     });
+    function endMouseDrag(event) {
+      if (!mouseDrag || event.pointerId !== mouseDrag.id) return;
+      mouseDrag = null;
+      dialog.classList.remove('is-grabbing');
+    }
+    stage.addEventListener('pointerup', endMouseDrag);
+    stage.addEventListener('pointercancel', endMouseDrag);
+    dialog.addEventListener('wheel', function (event) {
+      if (!zoom || pinch) return;
+      event.preventDefault();
+      var unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? dialog.clientHeight : 1;
+      panBy(-event.deltaX * unit, -event.deltaY * unit);
+    }, { passive: false });
 
     /* ------------------------------------------------- details & controls */
     function setInfo(visible, animate) {
@@ -727,6 +823,7 @@
         return;
       }
       if (event.pointerType === 'touch' || lastPointerType === 'touch') return; // touch: handled by the gestures below
+      if (mouseMoved) { mouseMoved = false; return; } // the end of a drag, not a click
       if (frame.contains(event.target)) toggleZoom(event.clientX, event.clientY);
       else if (zoom) endZoom(true);
       else if (event.target === stage) close(); // the empty area around the photo
@@ -1028,6 +1125,7 @@
 
     /* ------------------------------------------------- deep link on load */
     var initial = indexFromHash();
+    root.classList.remove('deep-link'); // the viewer opens now (or the link was stale)
     if (initial >= 0) {
       open(initial);
       // The browser's jump to #photo-… can take focus away; give it back.

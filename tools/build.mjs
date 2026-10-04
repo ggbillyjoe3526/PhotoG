@@ -11,7 +11,8 @@
  *
  * Safety rules:
  *  - index.html is only rewritten, and old files only deleted, when every
- *    photo processed successfully. Damaged or incomplete files stop the build.
+ *    photo processed successfully. Damaged or incomplete files stop the build
+ *    (every new photo is decoded in full and checked before any encoding).
  *  - An empty photos/ folder never empties a published gallery (unless
  *    --allow-empty is passed).
  *  - Only files this build generated (name-hash-width.avif|jpg) are ever
@@ -21,7 +22,7 @@
  *    location and date text at the level chosen in site.json ("show").
  */
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -49,10 +50,12 @@ const ENCODE = {
   widths: [320, 480, 640, 800, 1000, 1200, 1600, 2000, 2400, 3200],
   maxLongEdge: 3200, // px; also caps tall portraits
   jpeg: { quality: 82, mozjpeg: true },
-  avif: { quality: 58, effort: 4 },
-  avifLarge: { quality: 64, effort: 4, from: 1600 }, // viewer sizes keep grain and fine detail
+  // AVIF quality by width (up to N px wide → quality), rising gently so
+  // thumbnails stay small and the viewer's sizes keep grain and fine detail.
+  avifSteps: [[640, 60], [1200, 62], [Infinity, 63]],
+  avifEffort: 4,
   density: 72,
-  revision: 4,
+  revision: 5,
 };
 const PIXEL_LIMIT = 1_000_000_000; // sharp's default (268 MP) is too small for big stitched panoramas
 
@@ -70,7 +73,7 @@ const UNSUPPORTED_EXT = new Set([
   '.heic', '.heif', '.dng', '.nef', '.nrw', '.cr2', '.cr3', '.crw', '.arw', '.srf', '.sr2', '.raf', '.orf',
   '.rw2', '.pef', '.srw', '.x3f', '.3fr', '.fff', '.iiq', '.erf', '.mef', '.mos', '.psd', '.psb', '.gif', '.bmp',
 ]);
-const OVERRIDE_KEYS = ['title', 'caption', 'alt', 'location', 'date', 'camera', 'lens', 'focal', 'aperture', 'shutter', 'iso', 'exif'];
+const OVERRIDE_KEYS = ['title', 'caption', 'alt', 'location', 'date', 'camera', 'lens', 'focal', 'aperture', 'shutter', 'iso', 'exif', 'hide'];
 const EXIF_KEYS = ['camera', 'lens', 'focal', 'aperture', 'shutter', 'iso'];
 const GENERATED_FILE = /^[a-z0-9-]+-[0-9a-f]{8}-\d+\.(?:avif|jpg)(?:\.tmp)?$/;
 const KNOWN_FLAGS = new Set(['--force', '--allow-empty', '--help', '-h']);
@@ -175,13 +178,19 @@ function round(value, digits = 1) {
   return Math.round(value * f) / f;
 }
 
-/** Names cameras give files: DSC_1234, _DSC1234, IMG_1234, _MG_1234, _IGP0042,
- *  P1000123, PXL_… (the DCF rule is four characters then four digits). */
-const CAMERA_NAME = /^(?:_?dsc[fn]?|_?dsf|_?mg_?|_?img|imgp|pxl|mvimg|gopr|dji|p\d{3}|r\d{3}|_?[a-z]\d{3})[\s._-]*\d{3,}|^[a-z0-9_]{4}\d{4}(?:[\s._-]|$)/i;
+/** Names cameras give files: DSC_1234, _DSC1234, IMG_1234, _MG_1234, PXL_…,
+ *  and the general camera rule (DCF): four upper-case letters, digits or "_",
+ *  then four digits (_IGP0042, P1000123, _1000123). Cameras write these in
+ *  upper case, so "_old2024" is not one. */
+const CAMERA_PREFIX = /^(?:_?dsc[fn]?|_?dsf|_?mg_?|_?img|imgp|pxl|mvimg|gopr|dji)[\s._-]*\d{3,}/i;
+const DCF_NAME = /^[A-Z0-9_]{4}\d{4}(?:[\s._-]|$)/;
+export function isCameraName(stem) {
+  return CAMERA_PREFIX.test(stem) || DCF_NAME.test(stem);
+}
 
 /** A leading "_" hides a photo, except on camera names such as _DSC1234. */
 export function isHiddenFile(fileName) {
-  return fileName.startsWith('_') && !CAMERA_NAME.test(path.parse(fileName).name);
+  return fileName.startsWith('_') && !isCameraName(path.parse(fileName).name);
 }
 
 const TRANSLIT = { ø: 'o', Ø: 'O', æ: 'ae', Æ: 'AE', œ: 'oe', Œ: 'OE', ß: 'ss', ł: 'l', Ł: 'L', đ: 'd', Đ: 'D', þ: 'th', Þ: 'TH', ð: 'd' };
@@ -200,7 +209,7 @@ export function nameInfo(fileName) {
 
   // Camera names make poor titles.
   const words = stem.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-  const title = CAMERA_NAME.test(stem) || !/\p{L}/u.test(words) ? '' : words.charAt(0).toUpperCase() + words.slice(1);
+  const title = isCameraName(stem) || !/\p{L}/u.test(words) ? '' : words.charAt(0).toUpperCase() + words.slice(1);
   return { slug, fileSlug, title };
 }
 
@@ -262,12 +271,14 @@ function dateParts(value) {
   return iso ? { y: +iso[1], m: +iso[2], d: +iso[3] } : null;
 }
 
-/** Typed camera values as the page shows them: "35" → "35mm", "5.6" → "f/5.6",
- *  "125" → "1/125s", "400" → "ISO 400". Anything else is kept as typed. */
+/** Typed camera values as the page shows them: "35" → "35mm", "24-70" →
+ *  "24–70mm", "5.6" → "f/5.6", "125" → "1/125s" (type "30s" for 30 seconds),
+ *  "400" → "ISO 400". Anything else is kept as typed. */
 export function normaliseTyped(key, value) {
   if (!value) return '';
   const n = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : NaN;
   if (key === 'focal' && n > 0) return `${round(n, 0)}mm`;
+  if (key === 'focal' && /^\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?$/.test(value)) return `${value.replace(/\s*[-–]\s*/, '–')}mm`; // a zoom: "24-70"
   if (key === 'aperture') return n > 0 ? `f/${round(n)}` : value.replace(/^f\s*/i, 'f/').replace(/^f\/\//, 'f/');
   if (key === 'shutter') {
     if (/^1\/\d+$/.test(value)) return `${value}s`;
@@ -287,20 +298,28 @@ export function formatDate(value, level = 'day') {
   return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
 }
 
-/** Turn library errors into something a photographer can act on. */
-export function explainError(err) {
+/** Turn library errors into something a photographer can act on. Printed
+ *  after the file name, as "01-dunes.jpg: is incomplete: …". */
+export function explainError(err, fileName = '') {
   // libvips can repeat a line many times; keep each once.
   const msg = [...new Set(String(err && err.message || err).split('\n').map((l) => l.trim()).filter(Boolean))].join(' ');
+  const detail = ` (${msg.replace(/\s+/g, ' ').trim()})`;
   if (/input (buffer|file) is empty|empty file/i.test(msg)) return 'is empty (0 bytes). Copy or export it again.';
   if (/ENOSPC/.test(msg)) return "couldn't be saved: the disk is full. Free some space and run again.";
   if (/EISDIR/.test(msg)) return "couldn't be saved: a folder is in the way of a file the build writes.";
   if (/EPERM|EACCES|EBUSY/.test(msg)) return "couldn't be read or saved (permission denied or the file is in use, e.g. by a sync app or antivirus). Try again.";
   if (/pixel limit|exceeds pixel/i.test(msg)) return 'is too large to process (over a billion pixels). Export a smaller version.';
-  if (/unsupported image format|not a known file format|unknown format/i.test(msg)) return "isn't an image file the build can read. Export it as JPEG or TIFF.";
-  if (/corrupt|bad huffman|damaged|invalid/i.test(msg)) return `is damaged and can't be read reliably. Export it again. (${msg.replace(/\s+/g, ' ').trim()})`;
-  if (/premature end of (jpeg )?(image|file)|truncated|unexpected end/i.test(msg)) return 'is incomplete: the file was cut off (for example an unfinished copy or download). Copy or export it again.';
-  if (/marker|vipsjpeg|tiff|png|webp|heif|premature end/i.test(msg)) return `is damaged and can't be read reliably. Export it again. (${msg.replace(/\s+/g, ' ').trim()})`;
-  if (/warning treated as error/i.test(msg)) return "is damaged or incomplete and can't be read reliably. Export it again.";
+  if (/premature end of (jpeg )?(image|file)|truncated|unexpected end|not enough data|read error|stripbytecounts|scanline|end of stream|unexpected eof/i.test(msg)) {
+    return 'is incomplete: the file was cut off (for example an unfinished copy or download). Copy or export it again.';
+  }
+  if (/unsupported image format|not a known file format|unknown format|bad seek|not a (jpeg|png|tiff)/i.test(msg)) {
+    return INPUT_EXT.has(path.extname(fileName).toLowerCase())
+      ? `is damaged or incomplete: its name says ${path.extname(fileName).slice(1).toUpperCase()}, but it can't be read as an image. Copy or export it again.`
+      : "isn't an image file the build can read. Export it as JPEG or TIFF.";
+  }
+  if (/corrupt|bad huffman|damaged|invalid|marker|vipsjpeg|tiff|png|webp|heif|premature end|warning treated as error/i.test(msg)) {
+    return `is damaged and can't be read reliably. Export it again.${detail}`;
+  }
   return msg;
 }
 
@@ -339,6 +358,21 @@ export async function readJson(file, fallback, notes) {
   }
 }
 
+/**
+ * A fingerprint of the files index.html is built from that live in git
+ * (site.json, photos/details.json, assets/js/page.js). The build writes it
+ * into index.html; tools/check-site.mjs recomputes it, so the publishing
+ * workflow notices when one was edited (say on github.com) without
+ * rebuilding. Line endings and a byte-order mark don't count, so Windows
+ * checkouts agree with Linux ones.
+ */
+export function sourceFingerprint(contents) {
+  const normal = contents.map((c) => String(c ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'));
+  return hash(normal.join('\u0000'), 12);
+}
+export const FINGERPRINT_FILES = ['site.json', 'photos/details.json', 'assets/js/page.js'];
+export const FINGERPRINT_MARK = /<!-- sources: ([0-9a-f]{12}) [^>]*-->/;
+
 /** "Unexpected token…" → where it is and what is probably wrong. */
 export function describeJsonError(raw, err) {
   const msg = String(err.message || err);
@@ -351,14 +385,28 @@ export function describeJsonError(raw, err) {
     line = before.length;
     col = before.at(-1).length + 1;
   }
-  if (!line) return msg;
+  if (!line) {
+    // Some Node versions give no position: look for the usual suspects.
+    const at = (re) => {
+      const i = raw.search(re);
+      if (i < 0) return '';
+      const before = raw.slice(0, i).split('\n');
+      return ` (line ${before.length}, column ${before.at(-1).length + 1})`;
+    };
+    if (/[“”]/.test(raw)) return `curly quotes “ ” must be straight quotes "${at(/[“”]/)}.`;
+    if (/[‘’]/.test(raw)) return `curly quotes ‘ ’ aren't allowed around text; use straight double quotes "${at(/[‘’]/)}.`;
+    if (/(^|[{,:\s])'[^'\n]*'\s*[:,}\]]/m.test(raw)) return `text must be in double quotes ", not single quotes '${at(/(^|[{,:\s])'[^'\n]*'\s*[:,}\]]/m)}.`;
+    if (/unexpected end/i.test(msg)) return 'it ends too early: a closing } or ] is probably missing.';
+    return msg;
+  }
   const lines = raw.split('\n');
   const prev = lines.slice(0, line - 1).reverse().find((l) => l.trim());
   const here = (lines[line - 1] || '').trim();
   let hint = '';
   if (prev && /["\]}\d]\s*$/.test(prev.trim()) && /^["{[]/.test(here)) hint = ` Probably a missing comma at the end of line ${lines.lastIndexOf(prev) + 1}.`;
-  else if (/[“”]/.test(here)) hint = ' Curly quotes “ ” must be straight quotes ".';
+  else if (/[“”‘’]/.test(here)) hint = ' Curly quotes “ ” must be straight quotes ".';
   else if (/^\s*'/.test(here) || /:\s*'/.test(here)) hint = " Text must be in double quotes \", not single quotes '.";
+  if (!hint && /unexpected end/i.test(msg)) hint = ' It ends too early: a closing } or ] is probably missing.';
   return `problem at line ${line}, column ${col}.${hint}`;
 }
 
@@ -489,38 +537,55 @@ export function widthLadder(width, height) {
   return [...ENCODE.widths.filter((w) => w < top * 0.85), top];
 }
 
-function rightsXmp({ artist, copyright }) {
+function rightsXmp({ artist, copyright, statement }) {
   const parts = [];
   if (artist) parts.push(`<dc:creator><rdf:Seq><rdf:li>${escapeHtml(artist)}</rdf:li></rdf:Seq></dc:creator>`);
   if (copyright) parts.push(`<dc:rights><rdf:Alt><rdf:li xml:lang="x-default">${escapeHtml(copyright)}</rdf:li></rdf:Alt></dc:rights>`);
+  if (statement) parts.push(`<xmpRights:Marked>True</xmpRights:Marked><xmpRights:WebStatement>${escapeHtml(statement)}</xmpRights:WebStatement>`);
   if (!parts.length) return '';
-  return '<?xpacket begin="\ufeff" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
+  return '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
     '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
-    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">' + parts.join('') +
+    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmpRights="http://ns.adobe.com/xap/1.0/rights/">' + parts.join('') +
     '</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
 }
 
 /** Decoder warnings some cameras', phones' and scanners' files trigger while
- *  the image itself is fine. Anything else means damage. */
+ *  the image itself is fine. */
 const BENIGN_WARNINGS = [/extraneous bytes before marker/i, /invalid sos parameters for sequential jpeg/i, /unknown jfif revision/i];
+/** Warnings that mean the picture data itself is damaged or missing. */
+const DAMAGE_WARNING = /corrupt|premature end|huffman|resync|truncated|not enough data|read error|stripbytecounts|scanline|unexpected end|out of data|crc|inflate|zlib|decode error|invalid (?:code|distance|block)/i;
+const isDamage = (line) => !BENIGN_WARNINGS.some((re) => re.test(line)) && DAMAGE_WARNING.test(line);
+
+/** Let warnings left over from earlier image operations go (sharp keeps
+ *  one queue for all of them; any finished operation takes what's queued). */
+async function drainWarnings() {
+  await sharp({ create: { width: 1, height: 1, channels: 3, background: '#000' } }).raw().toBuffer();
+}
 
 /**
- * Decode, orient, colour-convert and downscale ONCE into a master. Every
- * decoder warning is collected: a harmless quirk becomes a note, anything
- * else (or more warnings than the harmless ones shown) stops the photo, so a
- * damaged file is never published half grey.
+ * Read every pixel at full size and make sure the picture is intact. (The
+ * encoder shrinks while decoding, which skips most of the data and reports
+ * nothing, so this is a separate, full pass.) Harmless quirks come back as a
+ * note; damage throws. Run one photo at a time, before any encoding starts,
+ * so no other image operation can take this photo's warnings.
  */
-async function decodeMaster(buffer, maxWidth, notes, fileName) {
+async function checkIntegrity(buffer, fileName) {
+  const options = { limitInputPixels: PIXEL_LIMIT };
+  // 1. Strict: the first warning stops it. Streams the image, little memory.
+  try {
+    await sharp(buffer, { ...options, failOn: 'warning' }).stats();
+    return '';
+  } catch (err) {
+    const lines = String(err && err.message || err).split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.some(isDamage)) throw err;
+  }
+  // 2. A warning that may be harmless: read everything again, collecting all
+  //    of them (real errors, e.g. not an image at all, throw here).
+  await drainWarnings();
   const warnings = [];
-  const image = sharp(buffer, { failOn: 'none', limitInputPixels: PIXEL_LIMIT });
+  const image = sharp(buffer, { ...options, failOn: 'none' });
   image.on('warning', (message) => warnings.push(String(message)));
-  const master = await image
-    .rotate()
-    .resize({ width: maxWidth, withoutEnlargement: true })
-    .flatten({ background: '#ffffff' }) // transparency becomes white
-    .toColourspace('srgb')
-    .raw({ depth: 'uchar' })
-    .toBuffer({ resolveWithObject: true });
+  await image.raw().toBuffer(); // (extracting one channel would lose warnings)
   const lines = new Set();
   let reported = 0;
   for (const w of warnings) {
@@ -528,18 +593,38 @@ async function decodeMaster(buffer, maxWidth, notes, fileName) {
     if (count) { reported = Math.max(reported, +count[1]); continue; }
     for (const line of w.split('\n')) if (line.trim()) lines.add(line.trim());
   }
-  const damage = [...lines].filter((l) => !BENIGN_WARNINGS.some((re) => re.test(l)));
+  const all = [...lines];
+  const damage = all.filter(isDamage);
   if (damage.length) throw new Error(damage.join('\n'));
+  // libjpeg describes only the first problem in each pass; more warnings than
+  // descriptions means something else went wrong too.
   if (reported > lines.size) throw new Error('Corrupt JPEG data: the decoder found more problems than it described');
-  if (lines.size) notes.push(`${fileName}: has a harmless quirk (${[...lines][0].replace(/^VipsJpeg:\s*/, '')}); it was processed normally.`);
-  return master;
+  const tidy = (line) => line.replace(/^Vips\w+:\s*/, '');
+  const other = all.filter((l) => !BENIGN_WARNINGS.some((re) => re.test(l)));
+  if (other.length) return `${fileName}: the decoder warned "${tidy(other[0])}". It was published; check that it looks right.`;
+  return all.length ? `${fileName}: has a harmless quirk (${tidy(all[0])}); it was processed normally.` : '';
 }
 
-async function encode(buffer, id, rights, notes, fileName) {
+/** Decode, orient, colour-convert to sRGB and downscale ONCE into a master. */
+async function decodeMaster(buffer, maxWidth) {
+  const options = { failOn: 'truncated', limitInputPixels: PIXEL_LIMIT };
+  const meta = await sharp(buffer, options).metadata();
+  let pipeline = sharp(buffer, options)
+    .rotate()
+    .resize({ width: maxWidth, withoutEnlargement: true })
+    .flatten({ background: '#ffffff' }) // transparency becomes white
+    .toColourspace('srgb');
+  // 16-bit files with a colour profile are processed in a wide-gamut space;
+  // convert them to real sRGB (untagged files are already treated as sRGB).
+  if (meta.depth === 'ushort' && meta.hasProfile) pipeline = pipeline.withIccProfile('srgb');
+  return pipeline.raw({ depth: 'uchar' }).toBuffer({ resolveWithObject: true });
+}
+
+async function encode(buffer, id, rights) {
   const { width, height } = orientedSize(await sharp(buffer, { failOn: 'truncated', limitInputPixels: PIXEL_LIMIT }).metadata());
   if (!width || !height) throw new Error('could not read the image size');
   const widths = widthLadder(width, height);
-  const master = await decodeMaster(buffer, widths.at(-1), notes, fileName);
+  const master = await decodeMaster(buffer, widths.at(-1));
   const raw = { width: master.info.width, height: master.info.height, channels: master.info.channels };
   const fromMaster = () => sharp(master.data, { raw });
 
@@ -555,8 +640,7 @@ async function encode(buffer, id, rights, notes, fileName) {
       .withIccProfile('srgb')
       .withExif({ IFD0: ifd0, IFD2: { ColorSpace: '1' } }); // 1 = sRGB
     if (xmp) pipeline = pipeline.withXmp(xmp);
-    const { from, ...avifLarge } = ENCODE.avifLarge;
-    pipeline = format === 'avif' ? pipeline.avif(w >= from ? avifLarge : ENCODE.avif) : pipeline.jpeg(ENCODE.jpeg);
+    pipeline = format === 'avif' ? pipeline.avif(avifSettings(w)) : pipeline.jpeg(ENCODE.jpeg);
     const file = path.join(OUT_DIR, `${id}-${w}.${format === 'avif' ? 'avif' : 'jpg'}`);
     await pipeline.toFile(`${file}.tmp`);
     await renameRetry(`${file}.tmp`, file);
@@ -565,6 +649,12 @@ async function encode(buffer, id, rights, notes, fileName) {
   // The tint comes from the smallest published JPEG, so every computer that
   // builds the site gets exactly the same colour.
   return { width, height, widths, tint: await tintOf(sharp(path.join(OUT_DIR, `${id}-${widths[0]}.jpg`))) };
+}
+
+/** AVIF quality rises gently with size: small thumbnails compress hardest. */
+function avifSettings(width) {
+  const step = ENCODE.avifSteps.find(([upTo]) => width <= upTo) ?? ENCODE.avifSteps.at(-1);
+  return { quality: step[1], effort: ENCODE.avifEffort };
 }
 
 /** Average colour (shown while a photo loads). */
@@ -582,10 +672,13 @@ async function allExist(files) {
 }
 
 /**
- * Prepare one photo: describe it, then reuse its images if they exist
- * (unchanged, renamed, or already built on another computer), or encode them.
+ * Step 1 for each photo (one photo at a time): work out what it is and
+ * whether its images already exist (unchanged, renamed, or built on another
+ * computer). Photos that need encoding are checked for damage here, before
+ * any encoding starts.
  */
-async function processPhoto(entry, cache, notes, show) {
+async function inspectPhoto(entry, ctx) {
+  const { cache, details, show, site, seenKeys, notes } = ctx;
   const sourcePath = path.join(SRC_DIR, entry.fileName);
   const info = await stat(sourcePath);
   const seen = cache.files[entry.fileName];
@@ -601,11 +694,11 @@ async function processPhoto(entry, cache, notes, show) {
 
   const key = hash(sourceHash + ENCODE_KEY, 8);
   const id = `${entry.names.fileSlug}-${key}`;
-  const meta = await readMetadata(buffer ?? sourcePath, entry.fileName, notes);
-  const text = describe(meta, entry.override, entry.names, show);
+  if (seenKeys.has(key)) notes.push(`${entry.fileName} is identical to ${seenKeys.get(key)}.`);
+  else seenKeys.set(key, entry.fileName);
 
   let image = null;
-  let status = 'encoded';
+  let status = 'encode';
   const known = !FORCE && cache.encodes[key];
   if (known && await allExist(filesFor(id, known.widths))) {
     image = known;
@@ -617,6 +710,17 @@ async function processPhoto(entry, cache, notes, show) {
     await Promise.all(from.map((f, i) => copyFile(path.join(OUT_DIR, f), path.join(OUT_DIR, to[i]))));
     image = known;
     status = 'renamed';
+    // Its text in details.json moves with it (unless the old name is still in use).
+    if (known.slug && known.slug !== entry.names.slug && !ctx.slugs.has(known.slug)) {
+      const old = details[known.slug];
+      const here = details[entry.names.slug];
+      const blank = (v) => !v || (typeof v === 'object' && Object.values(v).every((x) => x === '' || x == null));
+      if (old && !blank(old) && blank(here)) {
+        entry.override = old;
+        ctx.moves.set(known.slug, entry.names.slug);
+        notes.push(`details.json: the text for "${known.slug}" moved to "${entry.names.slug}" with the renamed photo.`);
+      }
+    }
   } else if (!FORCE) {
     // No record (e.g. a fresh clone), but the images may already be here.
     const size = orientedSize(await sharp(buffer ?? sourcePath, { failOn: 'truncated', limitInputPixels: PIXEL_LIMIT }).metadata());
@@ -628,9 +732,48 @@ async function processPhoto(entry, cache, notes, show) {
       }
     }
   }
-  if (!image) image = await encode(buffer ?? await readFile(sourcePath), id, text.rights, notes, entry.fileName);
-  cache.encodes[key] = { id, width: image.width, height: image.height, widths: image.widths, tint: image.tint, used: true };
 
+  const own = [];
+  const meta = await readMetadata(buffer ?? sourcePath, entry.fileName, own);
+  const text = describe(meta, entry.override, entry.names, show);
+  // Rights embedded in the images: the photo's own, else the site owner's.
+  const year = dateParts(meta.DateTimeOriginal ?? meta.CreateDate ?? meta.DateCreated)?.y ?? new Date().getFullYear();
+  text.rights = {
+    artist: text.rights.artist || site.name,
+    copyright: text.rights.copyright || `© ${year} ${site.name}`,
+    statement: site.licensePage || site.license,
+  };
+  text.year = year;
+
+  if (status === 'encode') {
+    buffer ??= await readFile(sourcePath);
+    const quirk = await checkIntegrity(buffer, entry.fileName);
+    if (quirk) own.push(quirk);
+  }
+  // The file is read again for encoding rather than held in memory meanwhile.
+  return { entry, key, id, sourcePath, sourceHash, image, status, text, notes: own };
+}
+
+/** Record a photo's images in the cache (and mark the record as in use). */
+function remember(plan, image, cache) {
+  cache.encodes[plan.key] = {
+    id: plan.id, slug: plan.entry.names.slug,
+    width: image.width, height: image.height, widths: image.widths, tint: image.tint, used: true,
+  };
+}
+
+/** Step 2 (in parallel): encode what needs it, and describe the result. */
+async function finishPhoto(plan, cache) {
+  const { entry, id, text } = plan;
+  let image = plan.image;
+  let status = plan.status;
+  if (!image) {
+    const buffer = await readFile(plan.sourcePath);
+    if (hash(buffer) !== plan.sourceHash) throw new Error('changed while the site was being built. Run the build again.');
+    image = await encode(buffer, id, text.rights);
+    status = 'encoded';
+  }
+  remember(plan, image, cache);
   const { rights, ...fields } = text;
   return {
     ...fields,
@@ -650,13 +793,31 @@ async function processPhoto(entry, cache, notes, show) {
 
 /* -------------------------------------------------------------- rendering */
 
+/** A one-line `var NAME = {…};` setting in assets/js/page.js, as an object.
+ *  The build reads page.js's settings rather than repeating them. */
+export function pageSetting(pageJs, name) {
+  const match = new RegExp(`var ${name} = (\\{[^\\n;]*\\});`).exec(pageJs);
+  if (!match) throw new Error(`assets/js/page.js is missing its one-line \`var ${name} = { … };\` setting.`);
+  return Function(`return ${match[1]}`)();
+}
+
+/** The source of `function name(…) { … }` in page.js (matched braces). */
+export function pageFunction(pageJs, name) {
+  const start = pageJs.indexOf(`function ${name}(`);
+  if (start < 0) throw new Error(`assets/js/page.js has no function ${name}(); the build needs it.`);
+  let depth = 0;
+  for (let i = pageJs.indexOf('{', start); i < pageJs.length; i++) {
+    if (pageJs[i] === '{') depth++;
+    else if (pageJs[i] === '}' && --depth === 0) return pageJs.slice(start, i + 1);
+  }
+  throw new Error(`assets/js/page.js: couldn't read function ${name}().`);
+}
+
 /** The gallery's target row height as CSS, built from the one definition
  *  (`var ROW = {…}`) in assets/js/page.js. Used for the sizes hints and the
  *  no-JS layout (--row-h on the gallery). */
 export function rowCss(pageJs) {
-  const match = /var ROW = (\{[^}\n]*\})/.exec(pageJs);
-  if (!match) throw new Error('assets/js/page.js is missing its `var ROW = { … };` line.');
-  const row = Function(`return ${match[1]}`)();
+  const row = pageSetting(pageJs, 'ROW');
   return `min(clamp(${row.min}px, calc(${row.base}px + ${+(row.vw * 100).toFixed(3)}vw), ${row.max}px), 85vh)`;
 }
 
@@ -670,13 +831,14 @@ function srcset(photo, ext) {
  * widths, worked out with the page's own row layout. 3x screens get 2x
  * files (page.js caps thumbnails at 2x too).
  */
-function eagerSizes(photos, pageJs) {
-  const src = pageJs;
-  const start = src.indexOf('  function partition(');
-  const end = src.indexOf('  /* ---- choosing thumbnail files */');
-  if (start < 0 || end < 0 || !photos.length) return [];
-  const row = Function(`return ${/var ROW = (\{[^}\n]*\})/.exec(src)[1]}`)();
-  const partition = Function('MAX_PER_ROW', `${src.slice(start, end)}; return partition;`)(12);
+export function eagerSizes(photos, pageJs) {
+  if (!photos.length) return [];
+  const row = pageSetting(pageJs, 'ROW');
+  const L = pageSetting(pageJs, 'LAYOUT');
+  const maxPerRow = +(/var MAX_PER_ROW = (\d+);/.exec(pageJs)?.[1] ?? NaN);
+  if (!(maxPerRow > 0)) throw new Error('assets/js/page.js is missing `var MAX_PER_ROW = …;`.');
+  const partition = Function('MAX_PER_ROW', `${pageFunction(pageJs, 'partition')}; return partition;`)(maxPerRow);
+  const clamp = ([lo, perVw, hi], vw) => Math.min(hi, Math.max(lo, vw * perVw));
   const ratios = photos.map((p) => p.width / p.height);
   // Screen widths up to which each estimate applies (CSS px). Within each
   // range the layout is sampled every 40px and the widest result is used, so
@@ -685,13 +847,16 @@ function eagerSizes(photos, pageJs) {
   for (let vw = 420; vw <= 1260; vw += 60) steps.push(vw);
   steps.push(1400, 1600, 1800, 2000, 2300, 2600);
   const at = (vw) => {
-    const gutter = Math.max(Math.min(48, Math.max(16, vw * 0.032)), (vw - 2200) / 2);
+    // The same sums as page.js's layout(), with style.css's margins.
+    const gutter = Math.max(clamp(L.gutter, vw), (vw - L.page) / 2);
     const width = vw - 2 * gutter - 1;
-    const gap = Math.min(12, Math.max(6, vw * 0.0075));
-    const vh = vw <= 599 ? 844 : vw <= 1024 ? 1180 : 900; // typical screen heights
-    const target = Math.min(Math.max(row.min, Math.min(row.max, row.base + row.vw * width)), (vh - 40) * 0.9);
+    const gap = clamp(L.gap, vw);
+    const isPhone = vw <= L.phone;
+    const vh = isPhone ? 844 : vw <= 1024 ? 1180 : 900; // typical screen heights
+    const maxH = vh - L.chrome;
+    const target = Math.min(Math.max(row.min, Math.min(row.max, row.base + row.vw * width)), maxH * L.fit);
     const widths = new Array(per.length).fill(0);
-    for (const r of partition(ratios, width, gap, target, vw <= 599 ? 64 : 80)) {
+    for (const r of partition(ratios, width, gap, target, L.minTile[isPhone ? 0 : 1], maxH)) {
       for (let k = r.start; k < r.end && k < per.length; k++) widths[k] = Math.ceil(ratios[k] * r.height);
     }
     return widths;
@@ -812,25 +977,32 @@ async function loadSite(notes) {
     }
     return Object.entries(v).map(([k, val]) => [k.trim(), str(val, `${label}.${k}`)]).filter(([k, val]) => k && val);
   };
-  const section = (key, example) => {
+  const section = (key, example, allowed, hint = '') => {
     const v = raw[key];
     if (v == null) return {};
-    if (typeof v === 'object' && !Array.isArray(v)) return v;
+    if (typeof v === 'object' && !Array.isArray(v)) {
+      const extra = Object.keys(v).filter((k) => !allowed.includes(k) && !k.startsWith('_'));
+      if (extra.length) {
+        notes.push(`site.json: unknown setting(s) ${extra.map((k) => `"${key}.${k}"`).join(', ')} were ignored ` +
+          `(allowed in "${key}": ${allowed.map((k) => `"${k}"`).join(', ')}${hint}).`);
+      }
+      return v;
+    }
     notes.push(`site.json: "${key}" should be a group like ${example}; it was ignored.`);
     return {};
   };
   const unknown = Object.keys(raw).filter((k) => !SITE_KEYS.includes(k));
   if (unknown.length) notes.push(`site.json: unknown setting(s) ${unknown.map((k) => `"${k}"`).join(', ')} were ignored (email and links go inside "contact", the bio inside "about").`);
-  const about = section('about', '{ "lede": "…", "text": ["…"] }');
-  const contact = section('contact', '{ "email": "…", "links": { … } }');
-  const showRaw = section('show', '{ "location": "city", "date": "month" }');
-  const licensing = section('licensing', '{ "license": "https://…", "page": "https://…" }');
+  const about = section('about', '{ "lede": "…", "text": ["…"] }', ['lede', 'text', 'facts']);
+  const contact = section('contact', '{ "email": "…", "links": { … } }', ['intro', 'email', 'links'], '; Instagram and other profiles go inside "links"');
+  const showRaw = section('show', '{ "location": "city", "date": "month" }', ['location', 'date']);
+  const licensing = section('licensing', '{ "license": "https://…", "page": "https://…" }', ['license', 'page']);
   const paragraphs = typeof about.text === 'string' ? [about.text] : Array.isArray(about.text) ? about.text : [];
 
   const site = {
     name: str(raw.name, 'name') || 'Your Name',
     title: str(raw.title, 'title') || 'Photography',
-    language: str(raw.language, 'language') || 'en',
+    language: str(raw.language, 'language').replace(/_/g, '-') || 'en', // pt_PT → pt-PT
     tagline: str(raw.tagline, 'tagline'),
     description: str(raw.description, 'description'),
     url: str(raw.url, 'url'),
@@ -914,7 +1086,8 @@ function renderMeta(site, cover, photos = []) {
     site.url && `<link rel="canonical" href="${escapeHtml(site.url)}">`,
     '<meta property="og:type" content="website">',
     `<meta property="og:site_name" content="${escapeHtml(site.name)}">`,
-    `<meta property="og:locale" content="${escapeHtml(locale.includes('_') ? locale : `${locale}`)}">`,
+    // Open Graph wants language_TERRITORY (en_GB); a bare "en" says nothing extra.
+    locale.includes('_') && `<meta property="og:locale" content="${escapeHtml(locale)}">`,
     `<meta property="og:title" content="${escapeHtml(title)}">`,
     site.description && `<meta property="og:description" content="${escapeHtml(site.description)}">`,
   ];
@@ -1072,12 +1245,15 @@ function prepareEntries(names, details, notes) {
     e.override = raw;
     const unknown = Object.keys(raw).filter((k) => !OVERRIDE_KEYS.includes(k));
     if (unknown.length) notes.push(`details.json: "${e.names.slug}" has unknown field(s) ${unknown.map((k) => `"${k}"`).join(', ')} (allowed: ${OVERRIDE_KEYS.join(', ')}).`);
+    if (raw.hide != null && typeof raw.hide !== 'boolean') notes.push(`details.json: "hide" for "${e.names.slug}" should be true or false (no quotes); ignored.`);
   }
-  return entries;
+  // "hide": true leaves a photo out (its text stays in details.json).
+  const hidden = entries.filter((e) => e.override?.hide === true);
+  return { entries: entries.filter((e) => e.override?.hide !== true), hidden };
 }
 
 /** Write details.json back: an entry per photo, untouched leftovers dropped. */
-async function updateDetails(details, entries) {
+async function updateDetails(details, entries, moves = new Map()) {
   const blank = { title: '', caption: '', alt: '', location: '', date: '', camera: '', lens: '' };
   const isBlank = (v) => v && typeof v === 'object' && Object.values(v).every((x) => x === '' || x == null);
   const next = {
@@ -1085,6 +1261,8 @@ async function updateDetails(details, entries) {
       'Optional text for each photo, keyed by its file name without the order number (01-dunes.jpg -> "dunes").',
       'Leave a field "" to use what the photo file says. Type text to replace it. Use "-" to hide it (e.g. a sensitive location).',
       'Fields: title, caption, alt (a description for screen readers), location, date, camera, lens, and also focal, aperture, shutter, iso.',
+      'Typed camera values get their units: focal "35" or "24-70", aperture "5.6", shutter "125" (= 1/125s; type "30s" for 30 seconds), iso "400".',
+      '"hide": true leaves a photo out of the gallery without moving or renaming it.',
       '"exif": false ignores all camera data in the file (useful for film scans: type camera, lens etc. yourself).',
       'How much location and date the page shows by default is set in site.json ("show").',
       'Set "_cover" to a photo name to choose the image used in link previews (default: the first landscape photo).',
@@ -1093,8 +1271,10 @@ async function updateDetails(details, entries) {
     _cover: typeof details._cover === 'string' ? details._cover : '',
   };
   const kept = [];
+  const movedTo = new Map([...moves].map(([from, to]) => [to, from]));
   for (const e of entries) {
-    const existing = details[e.names.slug] ?? details[e.fileName];
+    const from = movedTo.get(e.names.slug);
+    const existing = from ? details[from] : details[e.names.slug] ?? details[e.fileName];
     if (existing == null) next[e.names.slug] = { ...blank };
     else if (typeof existing === 'object' && !Array.isArray(existing)) next[e.names.slug] = { ...blank, ...existing };
     else next[e.names.slug] = existing; // not understood (noted above): kept exactly as written
@@ -1102,12 +1282,30 @@ async function updateDetails(details, entries) {
   for (const [key, value] of Object.entries(details)) {
     if (key.startsWith('_') || key in next) continue;
     if (entries.some((e) => e.fileName === key)) continue; // migrated to the new key
+    if (moves.has(key)) continue; // moved with its renamed photo
     if (isBlank(value)) continue;
     next[key] = value;
     kept.push(key);
   }
   await writeIfChanged(DETAILS_FILE, JSON.stringify(next, null, 2) + '\n');
   return { cover: next._cover, kept };
+}
+
+/** The build cache. It is only a speed-up, so a damaged one is replaced. */
+async function loadCache(notes) {
+  let stored = null;
+  try {
+    stored = await readJson(CACHE_FILE, {}, []);
+  } catch {
+    stored = null;
+  }
+  const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (!isMap(stored) || (stored.files != null && !isMap(stored.files)) || (stored.encodes != null && !isMap(stored.encodes))) {
+    notes.push('photos/.build-cache.json was damaged, so it was started afresh (existing images are still reused).');
+    return { files: {}, encodes: {} };
+  }
+  const encodes = Object.fromEntries(Object.entries(stored.encodes ?? {}).filter(([, e]) => isMap(e) && Array.isArray(e.widths) && e.id));
+  return { files: stored.files ?? {}, encodes };
 }
 
 async function main() {
@@ -1140,8 +1338,7 @@ async function build(notes, started) {
   await mkdir(SRC_DIR, { recursive: true });
   await mkdir(OUT_DIR, { recursive: true });
   const details = await readJson(DETAILS_FILE, {}, notes);
-  const stored = await readJson(CACHE_FILE, {}, notes);
-  const cache = { files: stored.files ?? {}, encodes: stored.encodes ?? {} };
+  const cache = await loadCache(notes);
   for (const e of Object.values(cache.encodes)) delete e.used;
 
   const found = await collectFiles();
@@ -1149,7 +1346,11 @@ async function build(notes, started) {
   if (found.folders.length) notes.push(`Folders inside photos/ are ignored: ${list(found.folders)}. Put photos directly in photos/.`);
   if (found.unsupported.length) notes.push(`Skipped ${found.unsupported.length} file(s) in a format browsers can't show (${list(found.unsupported, 4)}). Export them as JPEG or TIFF.`);
 
-  const entries = prepareEntries(found.photos, details, notes);
+  const { entries, hidden } = prepareEntries(found.photos, details, notes);
+  if (hidden.length) {
+    found.hidden.push(...hidden.map((e) => e.fileName));
+    notes.push(`Hidden ("hide": true in details.json): ${list(hidden.map((e) => e.fileName))}.`);
+  }
   if (!entries.length && previousIds.length && !ALLOW_EMPTY) {
     const left = [found.hidden.length && `${found.hidden.length} hidden`, found.unsupported.length && `${found.unsupported.length} in formats browsers can't show`].filter(Boolean);
     throw new Error(
@@ -1162,23 +1363,49 @@ async function build(notes, started) {
   const cores = os.availableParallelism?.() ?? os.cpus().length;
   const concurrency = Math.max(1, Math.min(2, Math.floor(cores / 2)));
   const failures = [];
-  let done = 0;
-  const results = await mapPool(entries, concurrency, async (entry) => {
-    const own = [];
+
+  // Step 1, one photo at a time: what is it, can its images be reused, and is
+  // a photo that needs encoding intact? (Damage stops the build before any
+  // encoding starts.)
+  const ctx = {
+    cache, details, show: site.show, site, notes,
+    seenKeys: new Map(),
+    slugs: new Set(entries.map((e) => e.names.slug)),
+    moves: new Map(),
+  };
+  const plans = [];
+  for (const entry of entries) {
     try {
-      const photo = await processPhoto(entry, cache, own, site.show);
-      notes.push(...own);
-      done++;
-      if (photo.status === 'encoded' || photo.status === 'renamed') {
-        console.log(`  [${String(done).padStart(String(entries.length).length)}/${entries.length}] ${photo.status.padEnd(8)} ${entry.fileName}`);
+      plans.push(await inspectPhoto(entry, ctx));
+    } catch (err) {
+      failures.push({ file: entry.fileName, message: explainError(err, entry.fileName) });
+    }
+  }
+
+  // Step 2, in parallel: encode what needs it.
+  const toEncode = plans.filter((p) => p.status === 'encode').length;
+  let done = 0;
+  const results = failures.length ? [] : await mapPool(plans, concurrency, async (plan) => {
+    try {
+      const photo = await finishPhoto(plan, cache);
+      notes.push(...plan.notes);
+      if (photo.status === 'encoded') {
+        done++;
+        console.log(`  [${String(done).padStart(String(toEncode).length)}/${toEncode}] encoded  ${plan.entry.fileName}`);
+      } else if (photo.status === 'renamed') {
+        console.log(`  renamed  ${plan.entry.fileName} (images copied from its old name)`);
       }
       return photo;
     } catch (err) {
-      done++;
-      failures.push({ file: entry.fileName, message: explainError(err) });
+      failures.push({ file: plan.entry.fileName, message: explainError(err, plan.entry.fileName) });
       return null;
     }
   });
+  const stoppedEarly = failures.length && !results.length;
+  if (stoppedEarly) {
+    // Nothing was encoded; keep the records of the photos whose images exist.
+    for (const plan of plans) if (plan.image) remember(plan, plan.image, cache);
+  }
 
   // Save the cache (minus records nothing uses any more), even after a failure,
   // so the photos that did process aren't encoded again next time.
@@ -1193,22 +1420,25 @@ async function build(notes, started) {
   if (failures.length) {
     printNotes(notes);
     console.error('\nThese photos could not be processed:');
-    for (const f of failures) console.error(`  ✗ ${f.file} ${f.message}`);
-    console.error('\nThe website was not changed (index.html is as it was). Images for the photos that');
-    console.error('did process were saved and will be reused next time.');
+    for (const f of failures) console.error(`  ✗ ${f.file}: ${f.message}`);
+    console.error(stoppedEarly
+      ? '\nThe website was not changed (index.html is as it was), and nothing was encoded.'
+      : '\nThe website was not changed (index.html is as it was). Images for the photos that\ndid process were saved and will be reused next time.');
     console.error('Fix or replace the files above (or start their names with "_" to leave them out) and run again.');
     process.exitCode = 1;
     return;
   }
   const photos = results;
 
-  const { cover: coverKey, kept } = await updateDetails(details, entries);
+  const { cover: coverKey, kept } = await updateDetails(details, [...entries, ...hidden], ctx.moves);
   let cover = coverKey ? photos.find((p) => p.id === coverKey) : null;
   if (coverKey && !cover) notes.push(`details.json: "_cover" is "${coverKey}", but no photo has that name; using the default.`);
   cover ??= photos.find((p) => p.width / p.height >= 1.2) ?? photos[0];
 
   html = html.replace(/<html lang="[^"]*">/, `<html lang="${escapeHtml(site.language)}">`);
-  html = replaceRegion(html, 'meta', renderMeta(site, cover, photos));
+  const fingerprint = sourceFingerprint(await Promise.all(FINGERPRINT_FILES.map((f) => readFile(path.join(ROOT, f), 'utf8').catch(() => ''))));
+  html = replaceRegion(html, 'meta', renderMeta(site, cover, photos) +
+    `\n    <!-- sources: ${fingerprint} (site.json, photos/details.json, page.js as last built; checked before publishing) -->`);
   html = replaceRegion(html, 'brand', renderBrand(site));
   html = replaceRegion(html, 'stats', renderStats(photos));
   html = replaceRegion(html, 'gallery', renderGallery(photos, pageJs));
@@ -1224,7 +1454,7 @@ async function build(notes, started) {
   for (const f of await readdir(OUT_DIR)) {
     if (GENERATED_FILE.test(f) && !keep.has(f)) {
       await unlink(path.join(OUT_DIR, f));
-      removed++;
+      if (!f.endsWith('.tmp')) removed++; // leftovers of an interrupted build aren't counted
     }
   }
 
@@ -1263,5 +1493,7 @@ async function build(notes, started) {
   printNotes(notes);
 }
 
-// Run when called as a script (not when imported by the tests).
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// Run when called as a script (not when imported by the tests). Real paths,
+// so a symlinked checkout still runs.
+const realPath = (file) => { try { return realpathSync(file); } catch { return path.resolve(file); } };
+if (process.argv[1] && realPath(process.argv[1]) === realPath(fileURLToPath(import.meta.url))) main();

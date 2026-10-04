@@ -3,6 +3,8 @@
     "Optional text for each photo, keyed by its file name without the order number (01-dunes.jpg -> \"dunes\").",
     "Leave a field \"\" to use what the photo file says. Type text to replace it. Use \"-\" to hide it (e.g. a sensitive location).",
     "Fields: title, caption, alt (a description for screen readers), location, date, camera, lens, and also focal, aperture, shutter, iso.",
+    "Typed camera values get their units: focal \"35\" or \"24-70\", aperture \"5.6\", shutter \"125\" (= 1/125s; type \"30s\" for 30 seconds), iso \"400\".",
+    "\"hide\": true leaves a photo out of the gallery without moving or renaming it.",
     "\"exif\": false ignores all camera data in the file (useful for film scans: type camera, lens etc. yourself).",
     "How much location and date the page shows by default is set in site.json (\"show\").",
     "Set \"_cover\" to a photo name to choose the image used in link previews (default: the first landscape photo).",

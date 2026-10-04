@@ -10,8 +10,9 @@ Order    Photos appear in file-name order. Start names with numbers:
          01-harbour.jpg, 02-dunes.jpg ... (the number is not shown anywhere).
          Each name must be different once the number is removed.
 Hide     Start a name with "_" to leave it out: _maybe-later.jpg
-         (camera names such as _DSC1234.jpg are not hidden). Folders inside
-         this folder are ignored.
+         (camera names such as _DSC1234.jpg are not hidden), or set
+         "hide": true for it in details.json. Folders inside this folder
+         are ignored.
 Text     Title, caption, location and date are read from the photo's own
          metadata (e.g. Lightroom's Title / Caption / Location fields).
          To change or add text without re-exporting, edit details.json

@@ -14,7 +14,8 @@ async function newPage(opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...opts });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  // (Downloads a test aborts on purpose are not page errors.)
+  page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   return { ctx, page };
 }
 const state = (page) => page.evaluate(() => {
@@ -261,7 +262,71 @@ for (const [from, to] of [[[844, 390], [390, 844]], [[1440, 900], [900, 900]], [
   await ctx.close();
 }
 
-// 8. Reduced motion: opens and closes without animations.
+// 8. Attempt-3 findings: phone details fit, zoomed taps don't jump, mouse
+//    drag pans, a failed image keeps the preview, swipe+key race.
+for (const [w, h] of [[390, 664], [390, 844]]) {
+  const { ctx, page } = await newPage({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+  let clipped = 0;
+  for (const id of ['ridgelines', 'fog-ridge', 'panorama', 'concrete']) {
+    await page.goto(base + '#photo-' + id, { waitUntil: 'networkidle' });
+    await settle(page, 400);
+    clipped += await page.evaluate(() => { const i = document.querySelector('.viewer-info'); return i.scrollHeight > i.clientHeight + 1 && !i.classList.contains('is-scrollable') ? 1 : 0; });
+  }
+  const over = await page.evaluate(() => { const i = document.querySelector('.viewer-info'); return i.scrollHeight - i.clientHeight; });
+  check(`phone ${w}x${h}: camera data never silently cut off`, clipped === 0, `overflow ${over}px`);
+  await ctx.close();
+}
+{
+  const { ctx, page } = await newPage({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
+  await page.goto(base + '#photo-ridgelines', { waitUntil: 'networkidle' });
+  await settle(page, 500);
+  const cdp = await ctx.newCDPSession(page);
+  const tap = async (x, y) => { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); };
+  await tap(300, 200); await page.waitForTimeout(80); await tap(300, 200);
+  await settle(page, 600);
+  const t1 = await page.evaluate(() => getComputedStyle(document.querySelector('.viewer-frame')).transform);
+  await tap(300, 200); await settle(page, 600);
+  const t2 = await page.evaluate(() => getComputedStyle(document.querySelector('.viewer-frame')).transform);
+  check('touch: tapping a zoomed photo toggles controls without moving it', t1 !== 'none' && t1 === t2, `${t1} → ${t2}`);
+  await ctx.close();
+}
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(base + '#photo-dunes', { waitUntil: 'networkidle' });
+  await settle(page, 500);
+  await page.keyboard.press('z'); await settle(page, 500);
+  const t0 = await page.evaluate(() => getComputedStyle(document.querySelector('.viewer-frame')).transform);
+  await page.mouse.move(700, 450); await page.mouse.down(); await page.mouse.move(600, 380, { steps: 6 }); await page.mouse.up();
+  await settle(page, 300);
+  const st = await page.evaluate(() => ({ zoomed: document.querySelector('.viewer').classList.contains('is-zoomed'), t: getComputedStyle(document.querySelector('.viewer-frame')).transform }));
+  check('mouse: dragging a zoomed photo pans it (and stays zoomed)', st.zoomed && st.t !== t0);
+  await ctx.close();
+}
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.route(/aurora-[0-9a-f]+-(1000|1200|1600|2000|2400)\.(avif|jpg)$/, (r) => r.abort());
+  await page.click('#photo-aurora .tile-link'); await settle(page, 1200);
+  const st = await page.evaluate(() => ({ full: !!document.querySelector('.viewer-full'), preview: !document.querySelector('.viewer-preview').hidden, slow: document.querySelector('.viewer-frame').classList.contains('is-slow') }));
+  check('a photo that fails to load keeps its preview (no broken image)', !st.full && st.preview && !st.slow, JSON.stringify(st));
+  await ctx.close();
+}
+{
+  const { ctx, page } = await newPage({ viewport: { width: 1024, height: 768 }, hasTouch: true });
+  await page.goto(base + '#photo-ridgelines', { waitUntil: 'networkidle' });
+  await settle(page, 500);
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 800, y: 400 }] });
+  for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 800 - i * 40, y: 402 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.keyboard.press('ArrowRight');
+  await settle(page, 700);
+  const peek = await page.evaluate(() => document.querySelector('.viewer-peek').hidden);
+  check('a key pressed during a swipe leaves no stray photo on screen', peek);
+  await ctx.close();
+}
+
+// 9. Reduced motion: opens and closes without animations.
 {
   const { ctx, page } = await newPage({ reducedMotion: 'reduce' });
   await page.goto(base, { waitUntil: 'networkidle' });

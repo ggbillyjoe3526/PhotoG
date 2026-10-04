@@ -101,8 +101,14 @@
   // matching CSS value (sizes hints, no-JS layout), so keep it on one line.
   var ROW = { min: 220, base: 200, vw: 0.09, max: 440 };
 
+  // Page geometry. gutter, gap and page mirror style.css (--gutter, --gap and
+  // the 2200px page width; a test checks they match) and phone is its
+  // breakpoint. The build reads this line too, to work out how wide the first
+  // photos will be before any script runs, so keep it on one line.
+  var LAYOUT = { gutter: [16, 0.032, 48], gap: [6, 0.0075, 12], page: 2200, phone: 599, minTile: [64, 80], chrome: 84, fit: 0.9 };
+
   var MAX_PER_ROW = 12;
-  var phone = window.matchMedia('(max-width: 599px)'); // same breakpoint as style.css
+  var phone = window.matchMedia('(max-width: ' + LAYOUT.phone + 'px)');
 
   function viewportHeight() { return document.documentElement.clientHeight || window.innerHeight; }
 
@@ -128,7 +134,7 @@
    * the emptier it is (most of all a single photo), so earlier rows
    * rebalance to give the gallery a good ending.
    */
-  function partition(ratios, width, gap, target, minTile) {
+  function partition(ratios, width, gap, target, minTile, maxH) {
     var n = ratios.length;
     var JUMP = 0.8;    // uneven neighbouring rows
     var LAST = 1.2;    // an unfilled last row
@@ -163,6 +169,8 @@
           if (h > target * 1.3) c += 4 * Math.pow(Math.log(h / (target * 1.3)), 2);
           if (h < target * 0.8) c += 4 * Math.pow(Math.log(h / (target * 0.8)), 2);
           if (k > 1 && h * minRatio < minTile) c += 10; // no slivers
+          // Taller than the screen (a phone held sideways): only as a last resort.
+          if (maxH && h > maxH) c += 20 + 50 * Math.pow(Math.log(h / maxH), 2);
         }
         var sum = prefix[e] - prefix[s];
         var openCost = function (drawn) {
@@ -333,10 +341,12 @@
     var gap = parseFloat(getComputedStyle(gallery).columnGap) || 0;
     var factor = sizeFactor(size);
     var target = baseRowHeight(width) * factor;
-    // On short screens (a phone held sideways) a row should fit the screen.
-    if (size !== 's') target = Math.min(target, (viewportHeight() - 40) * 0.9);
-    var minTile = (phone.matches ? 64 : 80) * Math.min(1, factor + 0.25);
-    var rows = partition(ratios, width, gap, target, minTile);
+    // On short screens (a phone held sideways) a row, with its caption,
+    // should fit on the screen.
+    var maxH = viewportHeight() - LAYOUT.chrome; // room for captions
+    target = Math.min(target, maxH * LAYOUT.fit);
+    var minTile = LAYOUT.minTile[phone.matches ? 0 : 1] * Math.min(1, factor + 0.25);
+    var rows = partition(ratios, width, gap, target, minTile, maxH);
 
     rows.forEach(function (row) {
       for (var k = row.start; k < row.end; k++) {
@@ -346,6 +356,7 @@
         tile.style.setProperty('--w', w + 'px');
         tile.style.setProperty('--h', Math.round(row.height * 100) / 100 + 'px');
         tile.classList.toggle('is-row-end', row.justified && k === row.end - 1);
+        tile.classList.toggle('is-narrow', w < 170); // just the frame number
         updateSizes(tile, w);
       }
     });
@@ -376,30 +387,46 @@
     function relayout() {
       lastWidth = gallery.getBoundingClientRect().width;
       lastHeight = viewportHeight();
-      layout(gallery, size);
+      try {
+        layout(gallery, size);
+      } catch (e) {
+        gallery.classList.add('layout-failed'); // the CSS grid takes over; photos still load
+        throw e;
+      }
     }
 
     fadeIn(gallery);
     relayout();
 
-    function onResize() {
+    function onResize(force) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(function () {
-        var widthChanged = Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5;
+        var widthChanged = force === true || Math.abs(gallery.getBoundingClientRect().width - lastWidth) >= 0.5;
         // Height only matters for the short-screen cap; ignore small changes
         // such as a phone's address bar showing and hiding while scrolling.
         var heightChanged = Math.abs(viewportHeight() - lastHeight) > lastHeight * 0.25;
-        if (widthChanged || heightChanged) relayout();
+        if (!widthChanged && !heightChanged) return;
+        // Keep the photo that was in the middle of the screen there (e.g.
+        // when a phone is turned, the screen's height changes too).
+        // (The window has already changed size: find the photo using the
+        // middle of the screen as it was.)
+        var anchor = window.scrollY > 0 ? centreTile(lastHeight / 2) : null;
+        relayout();
+        if (anchor) {
+          var r = anchor.getBoundingClientRect();
+          var delta = r.height < window.innerHeight ? r.top + r.height / 2 - window.innerHeight / 2 : r.top - 16;
+          if (Math.abs(delta) >= 1) window.scrollBy({ top: delta, behavior: 'instant' });
+        }
       });
     }
-    if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(gallery);
-    window.addEventListener('resize', onResize);
-    if (phone.addEventListener) phone.addEventListener('change', relayout);
+    if ('ResizeObserver' in window) new ResizeObserver(function () { onResize(); }).observe(gallery);
+    window.addEventListener('resize', function () { onResize(); });
+    if (phone.addEventListener) phone.addEventListener('change', function () { onResize(true); });
 
     /** The photo nearest the centre of the screen (the one being looked at). */
-    function centreTile() {
+    function centreTile(midY) {
       var cx = window.innerWidth / 2;
-      var cy = window.innerHeight / 2;
+      var cy = midY == null ? window.innerHeight / 2 : midY;
       var best = null;
       var bestDist = Infinity;
       for (var i = 0; i < tiles.length; i++) {

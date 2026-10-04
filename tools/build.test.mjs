@@ -2,10 +2,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { readFileSync } from 'node:fs';
+
 import {
-  decodeEntities, describe, describeJsonError, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
-  isHiddenFile, nameInfo, normaliseTyped, num, rowCss, scriptJson, text, widthLadder,
+  decodeEntities, describe, describeJsonError, eagerSizes, escapeHtml, explainError, formatCamera, formatDate, formatShutter,
+  isHiddenFile, nameInfo, normaliseTyped, num, pageFunction, pageSetting, rowCss, scriptJson, sourceFingerprint, text, widthLadder,
 } from './build.mjs';
+
+const PAGE_JS = readFileSync(new URL('../assets/js/page.js', import.meta.url), 'utf8');
+const STYLE = readFileSync(new URL('../assets/css/style.css', import.meta.url), 'utf8');
 
 test('nameInfo strips order numbers and dates, keeps real numbers', () => {
   assert.equal(nameInfo('03-horizon.jpg').slug, 'horizon');
@@ -29,6 +34,10 @@ test('camera file names make no title and are never hidden', () => {
   assert.equal(isHiddenFile('_1000123.jpg'), false);
   assert.equal(isHiddenFile('_draft-sunset.jpg'), true);
   assert.equal(isHiddenFile('sunset.jpg'), false);
+  // Cameras write upper case: these are the owner's own names, so hidden.
+  assert.equal(isHiddenFile('_old2024.jpg'), true);
+  assert.equal(isHiddenFile('_bw_2024.jpg'), true);
+  assert.equal(nameInfo('R0001234.JPG').title, '');
 });
 
 test('XMP text is decoded once', () => {
@@ -113,10 +122,18 @@ test('library errors are explained in plain language', () => {
   assert.match(explainError(new Error('Input buffer contains unsupported image format')), /isn't an image/);
   assert.match(explainError(new Error('VipsJpeg: Corrupt JPEG data: bad Huffman code')), /damaged/);
   assert.match(explainError(new Error('VipsJpeg: Corrupt JPEG data: premature end of data segment')), /damaged/);
+  // A cut-off file reports both; it is incomplete, not damaged.
+  assert.match(explainError(new Error('VipsJpeg: Corrupt JPEG data: premature end of data segment\nVipsJpeg: Premature end of JPEG file')), /incomplete/);
+  assert.match(explainError(new Error('pngload_buffer: libspng read error: not enough data')), /incomplete/);
+  assert.match(explainError(new Error('TIFFFetchStripThing: Bogus "StripByteCounts" field, ignoring and calculating from imagelength')), /incomplete/);
+  assert.match(explainError(new Error('Input buffer contains unsupported image format'), '05-pines.tif'), /damaged or incomplete: its name says TIF/);
+  assert.match(explainError(new Error('a\na\na')), /^a$/); // repeated lines once
 });
 
 test('typed camera values get units', () => {
   assert.equal(normaliseTyped('focal', '35'), '35mm');
+  assert.equal(normaliseTyped('focal', '24-70'), '24–70mm');
+  assert.equal(normaliseTyped('shutter', '30s'), '30s');
   assert.equal(normaliseTyped('aperture', '5.6'), 'f/5.6');
   assert.equal(normaliseTyped('aperture', 'f2'), 'f/2');
   assert.equal(normaliseTyped('shutter', '125'), '1/125s');
@@ -132,4 +149,40 @@ test('JSON errors say where and what', () => {
   let err;
   try { JSON.parse(raw); } catch (e) { err = e; }
   assert.match(describeJsonError(raw, err), /line 3.*missing comma at the end of line 2/);
+});
+
+test('JSON errors without a position still name the likely cause', () => {
+  const noPosition = new Error('Unexpected token');
+  assert.match(describeJsonError('{\n  "name": “Ana”\n}', noPosition), /curly quotes.*line 2/);
+  assert.match(describeJsonError("{\n  'name': 'Ana'\n}", noPosition), /single quotes/);
+  assert.match(describeJsonError('{\n  "a": [1, 2\n', new Error('Unexpected end of JSON input')), /closing \} or \] is probably missing/);
+});
+
+test('the build reads its layout settings from page.js', () => {
+  assert.deepEqual(Object.keys(pageSetting(PAGE_JS, 'ROW')), ['min', 'base', 'vw', 'max']);
+  assert.match(pageFunction(PAGE_JS, 'partition'), /^function partition\([\s\S]*\}$/);
+  assert.throws(() => pageSetting('var X = 1;', 'LAYOUT'), /LAYOUT/);
+  assert.throws(() => pageFunction('', 'partition'), /partition/);
+  const photos = [{ width: 3000, height: 2000 }, { width: 2000, height: 3000 }, { width: 3000, height: 2000 }];
+  const sizes = eagerSizes(photos, PAGE_JS);
+  assert.equal(sizes.length, 2);
+  assert.match(sizes[0], /^\(min-resolution: 2\.5dppx\) and \(max-width: 420px\) \d+px, /);
+  assert.match(sizes[0], /, \d+px$/);
+});
+
+test('page.js LAYOUT matches style.css', () => {
+  const L = pageSetting(PAGE_JS, 'LAYOUT');
+  const pct = (v) => `${+(v * 100).toFixed(3)}vw`;
+  assert.ok(STYLE.includes(`--gutter: clamp(${L.gutter[0]}px, ${pct(L.gutter[1])}, ${L.gutter[2]}px);`), '--gutter differs');
+  assert.ok(STYLE.includes(`--gap: clamp(${L.gap[0]}px, ${pct(L.gap[1])}, ${L.gap[2]}px);`), '--gap differs');
+  assert.ok(STYLE.includes(`(100vw - ${L.page}px) / 2`), 'page width differs');
+  const breakpoints = new Set([...STYLE.matchAll(/max-width: (\d+)px\)/g)].map((m) => +m[1]).filter((w) => w < 700));
+  assert.deepEqual([...breakpoints], [L.phone], 'phone breakpoint differs');
+});
+
+test('the source fingerprint ignores line endings and a byte-order mark', () => {
+  const a = sourceFingerprint(['{\n  "name": "A"\n}\n', '{}', 'var x;']);
+  assert.equal(sourceFingerprint(['\uFEFF{\r\n  "name": "A"\r\n}\r\n', '{}', 'var x;']), a);
+  assert.notEqual(sourceFingerprint(['{\n  "name": "B"\n}\n', '{}', 'var x;']), a);
+  assert.match(a, /^[0-9a-f]{12}$/);
 });
